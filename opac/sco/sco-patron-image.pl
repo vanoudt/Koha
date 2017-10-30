@@ -19,6 +19,7 @@
 
 use strict;
 use warnings;
+use C4::Auth qw(in_ipset);
 use C4::Service;
 use C4::Members;
 use Koha::Patron::Images;
@@ -33,6 +34,11 @@ unless (C4::Context->preference('WebBasedSelfCheck')) {
 }
 unless (C4::Context->preference('ShowPatronImageInWebBasedSelfCheck')) {
     print $query->header(status => '403 Forbidden - displaying patron images in self-check not enabled');
+    exit;
+}
+
+unless ( in_ipset(C4::Context->preference('SelfCheckAllowByIPRanges')) ) {
+    print $query->header(status => '403 Forbidden - functionality not available from your location');
     exit;
 }
 
