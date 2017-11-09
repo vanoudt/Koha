@@ -1,0 +1,415 @@
+/* Set up basic variables */
+$farbackgroundcolour: #f2f5fa;
+$mainblockbackgroundcolour: #fff;
+$linkcolour: rgb(17,69,114);
+$bookbordercolour: rgb(221,221,221);
+$shadowcolour: rgba(0,0,0,0.055);
+$mainbordercolour: #d8d8d8;
+$facetheadingbackgroundcolour: #f2f2ef;
+$breadcrumbbackgroundcolour: #f2f2ef;
+$viewbuttoncolour: #f2f2ef;
+$viewbuttontextcolour: #000;
+$activeviewbuttoncolour: #fbfbfb;
+$logoutcolour: red;
+$navbarbordercolour: #094A82;
+$navbarbackgroundcolour: #073E66; // 072e66;
+$mastheadtextcolour: #fff;
+$dropdownbackgroundcolour: $navbarbordercolour;
+$dropdownbordercolour: #fff;
+$buttoncolour1: rgb(60,116,168);
+$buttoncolour2: rgb(23,87,153);
+$buttoncolourActive: #3c74ba;
+$paginationbackgroundcolour: $mainblockbackgroundcolour;
+$paginationbordercolour: $mainbordercolour;
+$paginationactivebackgroundcolour: $buttoncolourActive;
+
+$bordercolour: darken($navbarbordercolour, 10%);
+$borderglowcolour: #ffffff;
+$toolbarcolour: darken(#e6f0f2,10%);;
+$menuheadingbackgroundcolour: lighten($bordercolour, 20%);
+$menutextcolour: #ffffff;
+$menuhighlighttextcolour: #ffffff;
+$menuhighlightbackgroundcolour: #f2f2ef;
+$textcolour: #000000;
+$tableheadingcolour: lighten($bordercolour, 20%);
+$tableheadingtextcolour: #ffffff;
+
+$softbackgroundcolour: #e6f0f2;
+$softbordercolour: darken($softbackgroundcolour, 30%);
+
+@function textcolour($colour) {
+	@if (lightness($colour) > 50) {
+		@return #000000;
+	} @else {
+		@return #ffffff;
+	}
+}
+@mixin horizontallineargradient($startpercent, $startcolour, $endpercent, $endcolour) {
+  background: $endcolour; /* Old browsers */
+  background:    -moz-linear-gradient(left, $startcolour $startpercent, $endcolour $endpercent); /* FF3.6+ */
+  background:        -webkit-gradient(linear, left top, right top, color-stop($startpercent,$startcolour), color-stop($endpercent,$endcolour)); /* Chrome,Safari4+ */
+  background: -webkit-linear-gradient(left, $startcolour $startpercent,$endcolour $endpercent); /* Chrome10+,Safari5.1+ */
+  background:      -o-linear-gradient(left, $startcolour $startpercent,$endcolour $endpercent); /* Opera 11.10+ */
+  background:     -ms-linear-gradient(left, $startcolour $startpercent,$endcolour $endpercent); /* IE10+ */
+  background:         linear-gradient(to right, $startcolour $startpercent,$endcolour $endpercent); /* W3C */
+  filter: none;
+}
+
+@mixin lineargradient($startpercent, $startcolour, $endpercent, $endcolour) {
+  background: $endcolour; /* Old browsers */
+  background:    -moz-linear-gradient(top, $startcolour $startpercent, $endcolour $endpercent); /* FF3.6+ */
+  background:        -webkit-gradient(linear, left top, left bottom, color-stop($startpercent,$startcolour), color-stop($endpercent,$endcolour)); /* Chrome,Safari4+ */
+  background: -webkit-linear-gradient(top, $startcolour $startpercent,$endcolour $endpercent); /* Chrome10+,Safari5.1+ */
+  background:      -o-linear-gradient(top, $startcolour $startpercent,$endcolour $endpercent); /* Opera 11.10+ */
+  background:     -ms-linear-gradient(top, $startcolour $startpercent,$endcolour $endpercent); /* IE10+ */
+  background:         linear-gradient(to bottom, $startcolour $startpercent,$endcolour $endpercent); /* W3C */
+  filter: none;
+  //filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='$startcolour', endColorstr='$endcolour',GradientType=0 ); /* IE6-9 */
+}
+@mixin simplelineargradient($startcolour, $endcolour) {
+	@include lineargradient(0%, $startcolour, 100%, $endcolour);
+}
+
+@mixin button($name, $startcolour, $endcolour) {
+	.btn-#{$name} {
+		background-color: $startcolour;
+		color: textcolour($startcolour);
+		border: 1px solid darken($endcolour,10%);
+		@include simplelineargradient($startcolour, $endcolour);
+	  &:hover,
+	  &:focus {
+  	  background-color: $endcolour;
+	    @include simplelineargradient($endcolour, $startcolour);
+	  }
+	  &:active {
+	    background-color: $buttoncolourActive;
+	  }
+	}
+}
+@mixin buttonise($element, $startcolour, $endcolour) {
+	#{$element} {
+		color: textcolour($startcolour);
+		border: 1px solid darken($endcolour, 10%);
+    background-color: $startcolour;
+    @include simplelineargradient($startcolour, $endcolour);
+    &:disabled, &:disabled:hover, &:disabled:focus, &:disabled:active {
+	backgroundcolour: desaturate($startcolour, 80%);
+	@include simplelineargradient(desaturate($endcolour, 80%), desaturate($endcolour, 80%));
+    }
+    &:hover,
+    &:focus {
+      background-color: $endcolour;
+      @include simplelineargradient($endcolour, $startcolour);
+    }
+    &:active {
+      background-color: $buttoncolourActive;
+    }
+  }
+
+}
+
+@mixin makeborderedarrow($element, $backgroundcolour, $location: 'centre') {
+	#{$element}:before, #{$element}:after {
+	        content: '';
+        	display: inline-block; 
+	        border-left: 7px solid transparent;
+	        border-right: 7px solid transparent;
+	        border-bottom: 7px solid $backgroundcolour;
+	        position: absolute;
+	        top: -7px;
+	        left: 0;
+	        @if $location == 'left' {
+	                margin-left: 15%;
+        	} @else if $location == 'right' {
+	                margin-left: 85%;
+        	} @else {
+	                margin-left: 50%;
+	        }
+	}
+	#{$element}:before {
+        	border-left: 8px solid transparent;
+	        border-right: 8px solid transparent;
+	        border-bottom: 8px solid;
+	        border-bottom-color: inherit; /* can't be in shorthand above */
+	        top: -8px;
+	        left: 0;
+	        @if $location == 'left' {
+	                margin-left: calc(15% - 1px);
+	        } @else if $location == 'right' {
+	                margin-left: calc(85% - 1px);
+	        } @else {
+	                margin-left: calc(50% - 1px);
+	        }
+
+	}
+}
+
+@include buttonise("button, .btn", $buttoncolour1, $buttoncolour2);
+@include button("primary", $buttoncolour1, $buttoncolour2);
+@include buttonise("input[type='submit'], input[type='reset'], input[type='button'], input.submit, a.submit", $buttoncolour1, $buttoncolour2);
+
+a.btn, a.btn:link, a.btn:visited {
+	color: textcolour($buttoncolour1);
+	text-shadow: none;
+	.caret {
+		border-top-color: textcolour($buttoncolour1);
+	}
+}
+/* Generic stuff */
+a { 
+        color: $linkcolour;
+        &:focus, &:hover {
+                color: darken($linkcolour,8%);
+        }
+}
+input, textarea {
+        font-family: "Open Sans";
+        background-color: rgba(255,255,255,.7);
+        border: 1px solid;
+        border-radius: 3px;
+	border-color: $bordercolour;
+	&:focus {
+		border-color: $bordercolour;
+		box-shadow: 0 0 1px $bordercolour, inset 0 0 3px 1px $borderglowcolour inner;
+	}
+}
+#searchheader {
+	background: $softbackgroundcolour;
+	border: 1px solid $softbordercolour;
+}
+div#toolbar, .btn-toolbar {
+        background-color: $toolbarcolour;
+        border: 0;
+        border-radius: 3px;
+        &.floating {
+             border-radius: 0;
+        }
+}
+
+/* Menu */
+div #menu {
+	border-right: 1px solid $bordercolour;
+}
+div#menu li, div#menu li.active {
+	a {
+		border: 1px solid $bordercolour;
+		@include horizontallineargradient(96%, $menuheadingbackgroundcolour, 110%, $bordercolour);
+		color: $menutextcolour;
+		&:hover {
+			border: 1px solid $bordercolour;
+			@include horizontallineargradient(96%, $menuhighlightbackgroundcolour, 110%, $bordercolour);
+			color: $linkcolour;
+		}
+	}
+}
+div#menu li.active a {
+	@include horizontallineargradient(96%, $menuhighlightbackgroundcolour, 110%, $bordercolour);
+	color: $textcolour;
+}
+.dropdown-menu {
+	margin: -1px 0 0;
+	background-color: $buttoncolour2;
+	border: 1px solid $bordercolour;
+	> li > a {
+		color: textcolour($buttoncolour2);
+		&:hover {
+			color: $buttoncolour2;
+			background: textcolour($buttoncolour2);
+		}
+	}
+}
+@include makeborderedarrow("ul.dropdown-menu.pull-right", $buttoncolour2, 'right');
+
+/* Tables */
+th, th.sorting_asc, th.sorting_desc, th.sorting_disabled {
+	background: $tableheadingcolour;
+	color: $tableheadingtextcolour;
+}
+body#main_auth {
+	background-image: url(/intranet-tmpl/pbc/oldbooks.jpg);
+	background-repeat: no-repeat;
+	background-size: cover;
+	background-position: center;
+	background-attachment: fixed;
+	min-height: 500px;
+}
+body#main_auth div#login {
+	border-radius: 4px;
+	background-color: rgba(131,79,42,.8);
+	border-color: rgb(131,79,42);
+}
+body#main_auth div#login #submit {
+	width: 100%;
+}
+
+@include buttonise("body#main_auth div#login #submit", rgb(131,79,42), darken(rgb(131,79,42), 20%));
+
+/* End Login Area */
+.navbar-static-top .navbar-inner {
+	background-color: $navbarbordercolour;
+}
+.navbar .nav > li {
+	> a {
+		color: rgba($mastheadtextcolour, .9);
+		text-shadow: none;
+	}
+	&:focus, &:hover {
+		background-color: $mastheadtextcolour;
+		> a {
+			color: $navbarbordercolour;
+		}
+	}
+}
+.navbar .separator {
+	color: #fff;
+}
+
+.gradient {
+	@include lineargradient(1%, $navbarbordercolour, 99%, $navbarbackgroundcolour);
+	.tip {
+		color: #fff;
+	}
+}
+#breadcrumbs {
+	background-color: rgba($breadcrumbbackgroundcolour, .8);
+}
+#header + #breadcrumbs {
+	margin-top: 0;
+}
+h1#logo, div#header_search {
+	float: none;
+	display: inline-block;
+}
+h1#logo {
+	margin: .75em .3em 0.75em .7em;
+	width: calc(20% - 1.5em);
+}
+div#header_search {
+	margin-right: .75em;
+	width: calc(80% - .75em);
+	input {
+		width: calc(89% - 2px);
+		border-width: 1px;
+		margin-left: .5%;
+		margin-right: .5%;
+		&:focus {
+			background-color: rgba(255,255,255,.9);
+		}
+	}
+	@include buttonise("input.submit", $buttoncolour1, $buttoncolour2);
+	input.submit {
+		border-width: 1px;
+		width: calc(8.5% - 4px);
+		margin-left: 0;
+		margin-right: 0;
+	}
+	div.residentsearch {
+		border-bottom: 1px solid $mastheadtextcolour;
+	}
+	ul.ui-tabs-nav {
+		li.ui-state-default {
+			border-radius: 0 0 4px 4px;
+			top: -1px;
+			&:focus, &:hover {
+				border: rgba($mastheadtextcolour, .8);
+				background-color: rgba($mastheadtextcolour, .8);
+				a {
+					color: $navbarbackgroundcolour;
+					text-shadow: none;
+					&:focus, &:hover {
+						text-shadow: none;
+					}
+				}
+			}
+			a {
+				color: $mastheadtextcolour;
+			}
+		}
+		li.ui-tabs-active {
+			border: $mastheadtextcolour;
+			background-color: $mastheadtextcolour;
+			&:focus, &:hover {
+			}
+			a {
+				color: $navbarbackgroundcolour;
+				&:focus, &:hover {
+					text-shadow: none;
+				}
+			}
+		}
+	}
+}
+
+body#cat_addbiblio {
+  background-image: url(/intranet-tmpl/pbc/marcedit.jpg);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  min-height: 500px;
+	padding-bottom: 0;
+	div#doc {
+		padding: .75em;
+		background-color: rgba(255,255,255,.8);
+		border-bottom-right-radius: 4px;
+		border-bottom-left-radius: 4px;
+	}
+	#toolbar, .btn-toolbar {
+		background-color: $tableheadingcolour;
+		border: 0;
+		border-radius: 3px;
+		&.floating {
+			border-radius: 0;
+		}
+	}
+	#addbibliotabs {
+			.ui-tabs-nav {
+				li.ui-state-default {
+					border: 1px solid lighten($tableheadingcolour, 30%);
+					border-bottom: 0;
+					background-color: lighten($tableheadingcolour, 50%);
+	      	a {
+	  	      color: lighten($tableheadingcolour, 20%);
+  	  	  }
+	  	  }
+	  	  li.ui-tabs-active {
+  	  	  border: 1px solid $tableheadingcolour;
+    	  	background-color: rgba($mastheadtextcolour,.8);
+	    	  a {
+  	    	  color: $tableheadingcolour;
+	    	  }
+		    }
+				li.ui-state-active {
+					margin-bottom: 0;
+					border-bottom: 1px solid $tableheadingtextcolour;
+				}
+			}
+			.ui-tabs-panel {
+				border: 1px solid $tableheadingcolour;
+				background-color: rgba($mastheadtextcolour, .8);
+				float: none;
+				* { float: none;}
+		}
+	}
+}
+.tag .indicator {
+	border:1px solid lighten($tableheadingcolour, 50%);
+}
+
+div.subfield_line {
+	float: none;
+	.labelsubfield,.subfield_controls { display: inline-block; }
+	label { width: 30%}
+	input { width: calc(60% - 2px);
+		border: 1px solid lighten($tableheadingcolour, 20%);
+	}
+	.subfield_controls { width: calc(10% - 1em);}
+}
+
+#search-facets {
+	border: 1px solid $softbordercolour;
+	h4 {
+		background: $softbackgroundcolour;
+		border-bottom: $softbordercolour;
+	}
+}

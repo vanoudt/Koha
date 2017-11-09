@@ -147,15 +147,18 @@
 
                         [% IF ( Koha.Preference('GoogleOpenIDConnect') == 1 ) %]
                             [% IF ( invalidGoogleOpenIDConnectLogin ) %]
-                                <h4>Google login</h4>
-                                <p>Sorry, your Google login failed. <span class="error">[% invalidGoogleOpenIDConnectLogin %]</span></p>
-                                <p>Please note that the Google login will only work if you are using the e-mail address registered with this library.</p>
-                                <p>If you want to, you can try to <a href="/cgi-bin/koha/svc/auth/googleopenidconnect?reauthenticate=select_account">log in using a different account</a>
-                            [% END %]
-                                <a href="/cgi-bin/koha/svc/auth/googleopenidconnect" class="btn btn-primary" id="openid_connect">Log in with Google</a>
-                                <p>If you do not have a Google account, but do have a local account, you can still log in: </p>
-                        [% END %]
-
+                              <div class="failedoauthlogin">
+                                <h4>Automatic Login</h4>
+                                <p>Sorry, your automatic login failed. <span class="error">[% invalidGoogleOpenIDConnectLogin %]</span></p>
+                                <p>Please note that automatic login will only work if you are using your student email address. For students, that generally means <em>firstname.surname@student.pbc.wa.edu.au</em>.</p>
+                                <p>Chances are, you've tried to login with a private gmail account instead. You can try to <a href="/cgi-bin/koha/svc/auth/googleopenidconnect?reauthenticate=select_account">login using a different account</a>.</p></span>
+                                 <h4>Local login</h4>
+                                 <p>If you can't login automatically, you may still login manually using your student id and password (choose <em>external student</em>)</p>
+                              </div>
+                            [% END # /End invalidLogin %]
+                            <a href="/cgi-bin/koha/svc/auth/googleopenidconnect?reauthenticate=select_account" class="btn btn-primary" id="oauth" style="margin-bottom: 2em;">PBC Student Sign in</a>
+                            <a href="#" class="btn btn-warning" id="externalaccounts" onclick="$('#auth').slideToggle();" style="color: #fff; margin-bottom: 2em;">Non-Student sign in</a>
+                        [% END # /End googleopenidconnect %]
                         [% IF SCO_login %]
                             <form action="/cgi-bin/koha/sco/sco-main.pl" name="auth" id="auth" method="post">
                         [% ELSE %]
@@ -191,6 +194,9 @@
                             [% END %]
                             </div>
                             </form>
+                          [% IF ( Koha.Preference('GoogleOpenIDConnect') == 1 ) %]
+                             </div>
+                          [% END %]
                         [% END # / IF loginprompt %]
 
                     [% ELSE %]
