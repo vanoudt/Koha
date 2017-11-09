@@ -1,20 +1,22 @@
-[% IF ( ( Koha.Preference( 'opacuserlogin' ) == 1 ) && loggedinusername ) %]
-    <div id="menu">
-        <h4><a href="#" class="menu-collapse-toggle">Your account menu</a></h4>
-        <ul class="menu-collapse">
+  <span class="menusection">Library Account</span>
+    <ul class="menu-collapse">
+      [% IF  ( Koha.Preference( 'opacuserlogin' ) == 1) %]
+        [% IF loggedinusername %]
+            <li><a class="logout" id="logoutmenu" href="/cgi-bin/koha/opac-main.pl?logout.x=1">Log out</a></li>
+
             [% IF ( userview ) %]
                 <li class="active">
             [% ELSE %]
                 <li>
             [% END %]
-                <a href="/cgi-bin/koha/opac-user.pl">your summary</a></li>
+                <a id="summary_link" href="/cgi-bin/koha/opac-user.pl">Account Summary</a></li>
             [% IF ( OPACFinesTab ) %]
                 [% IF ( accountview ) %]
                     <li class="active">
                 [% ELSE %]
                     <li>
                 [% END %]
-                <a href="/cgi-bin/koha/opac-account.pl">your fines</a></li>
+                <a href="/cgi-bin/koha/opac-account.pl">Fines</a></li>
             [% END %]
 
             [% IF ( userupdateview ) %]
@@ -22,23 +24,14 @@
             [% ELSE %]
                 <li>
             [% END %]
-                <a href="/cgi-bin/koha/opac-memberentry.pl">your personal details</a></li>
+                <a id="details_link" href="/cgi-bin/koha/opac-memberentry.pl">Personal Details</a></li>
             [% IF Koha.Preference( 'TagsEnabled' ) == 1 %]
                 [% IF ( tagsview ) %]
                     <li class="active">
                 [% ELSE %]
                     <li>
                 [% END %]
-                <a href="/cgi-bin/koha/opac-tags.pl?mine=1">your tags</a></li>
-            [% END %]
-
-            [% IF ( OpacPasswordChange ) %]
-                [% IF ( passwdview ) %]
-                    <li class="active">
-                [% ELSE %]
-                    <li>
-                [% END %]
-                <a href="/cgi-bin/koha/opac-passwd.pl">change your password</a></li>
+                <a href="/cgi-bin/koha/opac-tags.pl?mine=1">Your Tags</a></li>
             [% END %]
 
             [% IF EnableOpacSearchHistory %]
@@ -47,7 +40,7 @@
                 [% ELSE %]
                     <li>
                 [% END %]
-                <a href="/cgi-bin/koha/opac-search-history.pl">your search history</a></li>
+                <a id="searchhistory_link" href="/cgi-bin/koha/opac-search-history.pl">Search History</a></li>
             [% END %]
 
             [% IF ( opacreadinghistory ) %]
@@ -56,14 +49,14 @@
                 [% ELSE %]
                     <li>
                 [% END %]
-                <a href="/cgi-bin/koha/opac-readingrecord.pl">your reading history</a></li>
+                <a id="readinghistory_link" href="/cgi-bin/koha/opac-readingrecord.pl">Reading History</a></li>
                 [% IF ( OPACPrivacy ) %]
                     [% IF ( privacyview ) %]
                         <li class="active">
                     [% ELSE %]
                         <li>
                     [% END %]
-                    <a href="/cgi-bin/koha/opac-privacy.pl">your privacy</a></li>
+                    <a id="privacy_link" href="/cgi-bin/koha/opac-privacy.pl">Privacy Settings</a></li>
                 [% END %]
             [% END # / opacreadinghistory %]
 
@@ -73,7 +66,7 @@
                 [% ELSE %]
                     <li>
                 [% END %]
-                <a href="/cgi-bin/koha/opac-suggestions.pl">your purchase suggestions</a></li>
+                <a id="suggestions_link" href="/cgi-bin/koha/opac-suggestions.pl">Purchase Suggestions</a></li>
             [% END %]
 
             [% IF ( EnhancedMessagingPreferences ) %]
@@ -83,7 +76,7 @@
                     [% ELSE %]
                         <li>
                     [% END %]
-                    <a href="/cgi-bin/koha/opac-messaging.pl">your messaging</a></li>
+                    <a href="/cgi-bin/koha/opac-messaging.pl">Messaging</a></li>
                  [% END %]
             [% END %]
 
@@ -93,7 +86,7 @@
                 [% ELSE %]
                     <li>
                 [% END %]
-                <a href="/cgi-bin/koha/opac-shelves.pl?op=list&amp;category=1">your lists</a></li>
+                <a id="lists_link" href="/cgi-bin/koha/opac-shelves.pl?op=list&amp;category=1">Your Lists</a></li>
             [% END %]
 
             [% IF Koha.Preference( 'useDischarge' ) == 1 %]
@@ -102,8 +95,15 @@
                 [% ELSE %]
                     <li>
                 [% END %]
-                <a href="/cgi-bin/koha/opac-discharge.pl">ask for a discharge</a></li>
-            [% END %]
-        </ul>
-    </div>
-[% END %]
+                <a href="/cgi-bin/koha/opac-discharge.pl">Ask for a Discharge</a></li>
+		        [% END %]
+			[% ELSE %]
+				<li><a id="login_link" href="/cgi-bin/koha/svc/auth/googleopenidconnect">Log in <span>to access account and more resources</span></a></li>
+		    <li><a class="manuallogin" style="text-align:center; font-size:xx-small; color: #aaa;" href="/cgi-bin/koha/opac-user.pl">Manual login</a></form></li>
+			[% END %]
+		[% END %]
+   	</ul>
+<span class="menusection">PBC Account</span>
+	<ul class="menu-collapse">
+		<li><a id="quota_link" href="http://quota.pbcstudents.pbc.wa.edu.au:8999">Internet Quota</a>
+	</ul>
