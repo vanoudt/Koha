@@ -20,7 +20,7 @@ KOHA.Google = {
     GetCoverFromIsbn: function(newWindow) {
         var bibkeys = [];
         $("[id^=gbs-thumbnail]").each(function(i) {
-            bibkeys.push($(this).attr("class")); // id=isbn
+            bibkeys.push($(this).attr("class").split(' ')[0]); // id=isbn
         });
         bibkeys = bibkeys.join(',');
         var scriptElement = document.createElement("script");
@@ -51,6 +51,8 @@ KOHA.Google = {
                  if (typeof(book.thumbnail_url) != "undefined") {
                      var img = document.createElement("img");
                      img.src = book.thumbnail_url;
+                     img.setAttribute("class", "thumbnail");
+                     img.src = book.thumbnail_url+"&zoom=1";
                      $(this).empty().append(img);
                      var re = /^gbs-thumbnail-preview/;
                      if ( re.exec($(this).attr("id")) ) {
@@ -63,11 +65,27 @@ KOHA.Google = {
                              '"></a></div>'
                              );
                      }
+                 } else if ($(this).attr('data-title')) {
+                     var fakeCoverDiv = document.createElement("div");
+
+                     $(fakeCoverDiv).attr("class", "fakeCover");
+                     $(this).append(fakeCoverDiv);
+                     var auSpan = document.createElement("span");
+                     $(auSpan).attr("class", "author");
+                     $(auSpan).html($(this).attr("data-author"));
+                     $(fakeCoverDiv).append(auSpan);
+                     var tiSpan = document.createElement("span");
+                     $(tiSpan).attr("class", "title");
+
+                     $(tiSpan).html($(this).attr("data-title"));
+                     $(fakeCoverDiv).append(tiSpan);
                  } else {
-                     var message = document.createElement("span");
-                     $(message).attr("class","no-image");
-                     $(message).html(NO_GOOGLE_JACKET);
-                     $(this).empty().append(message);
+                     if ($("#bookcover").height() == 0) {
+                          $title=$(".title").text();
+                          $author=$(".author a:first-child").text();
+                          $fakeCover="<div class='fakeCover'><span class='title'>" + $title + "</span><span class='author'>" + $author + "</span></div>"
+                          $("#bookcover").append($fakeCover);
+                     }
                  }
              });
          }
