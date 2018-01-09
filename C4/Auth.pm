@@ -39,6 +39,7 @@ use Koha::Patrons;
 use POSIX qw/strftime/;
 use List::MoreUtils qw/ any /;
 use Encode qw( encode is_utf8);
+use Net::CIDR;
 
 # use utf8;
 use vars qw(@ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $debug $ldap $cas $caslogout $shib $shib_login);
@@ -55,7 +56,7 @@ BEGIN {
     @ISA       = qw(Exporter);
     @EXPORT    = qw(&checkauth &get_template_and_user &haspermission &get_user_subpermissions);
     @EXPORT_OK = qw(&check_api_auth &get_session &check_cookie_auth &checkpw &checkpw_internal &checkpw_hash
-      &get_all_subpermissions &get_user_subpermissions
+      &get_all_subpermissions &get_user_subpermissions &in_ipset
     );
     %EXPORT_TAGS = ( EditPermissions => [qw(get_all_subpermissions get_user_subpermissions)] );
     $ldap      = C4::Context->config('useldapserver') || 0;
@@ -2064,6 +2065,29 @@ sub haspermission {
     return $flags;
 
     #FIXME - This fcn should return the failed permission so a suitable error msg can be delivered.
+}
+
+=head2 in_ipset
+
+  $flags = ($ipset);
+
+C<$ipset> A space separated string describing an IP set. Can include single IPs or ranges
+
+Returns 1 if the remote address is in the provided ipset, or 0 otherwise.
+
+=cut
+
+sub in_ipset {
+ my ($ipset) = @_;
+ my @allowedipranges = split(' ', $ipset);
+ if (scalar @allowedipranges > 0) {
+    my @rangelist;
+    eval { @rangelist = Net::CIDR::range2cidr(@allowedipranges); }; return 0 if $@;
+    unless (Net::CIDR::cidrlookup($ENV{'REMOTE_ADDR'}, @rangelist)) {
+      return 0;
+    }
+ }
+ return 1;
 }
 
 sub getborrowernumber {
