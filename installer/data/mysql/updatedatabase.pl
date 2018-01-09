@@ -14370,12 +14370,12 @@ if( CheckVersion( $DBversion ) ) {
             $requested_expiration = dt_from_string($hold->expirationdate);
         }
 
-        my $calendar = Koha::Calendar->new( branchcode => $hold->branchcode );
-        my $expirationdate = dt_from_string();
-        $expirationdate->add(days => $max_pickup_delay);
-
+        my $expirationdate = dt_from_string($hold->waitingdate);
         if ( C4::Context->preference("ExcludeHolidaysFromMaxPickUpDelay") ) {
-            $expirationdate = $calendar->days_forward( dt_from_string(), $max_pickup_delay );
+            my $calendar = Koha::Calendar->new( branchcode => $hold->branchcode );
+            $expirationdate = $calendar->days_forward( $expirationdate, $max_pickup_delay );
+        } else {
+            $expirationdate->add( days => $max_pickup_delay );
         }
 
         my $cmp = $requested_expiration ? DateTime->compare($requested_expiration, $expirationdate) : 0;
@@ -14946,6 +14946,247 @@ if( CheckVersion( $DBversion ) ) {
 
     SetVersion( $DBversion );
     print "Upgrade to $DBversion done (Bug 13178 - Increase cardnumber fields to VARCHAR(32))\n";
+}
+
+$DBversion = '17.06.00.026';
+if( CheckVersion( $DBversion ) ) {
+    $dbh->do(q{
+        INSERT IGNORE INTO systempreferences ( `variable`, `value`, `options`, `explanation`, `type` ) VALUES
+        ('BlockReturnOfLostItems','0','0','If enabled, items that are marked as lost cannot be returned.','YesNo');
+    });
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 10748 - Add system preference BlockReturnOfLostItems)\n";
+}
+
+$DBversion = '17.06.00.027';
+if( CheckVersion( $DBversion ) ) {
+    if ( !column_exists( 'statistics', 'location' ) ) {
+        $dbh->do('ALTER TABLE statistics ADD COLUMN location VARCHAR(80) default NULL AFTER itemtype');
+    }
+
+    SetVersion($DBversion);
+    print "Upgrade to $DBversion done (Bug 18882 - Add location code to statistics table for checkouts and renewals)\n";
+}
+
+$DBversion = '17.06.00.028';
+if( CheckVersion( $DBversion ) ) {
+    if ( !TableExists( 'illrequests' ) ) {
+        $dbh->do(q{
+            CREATE TABLE illrequests (
+               illrequest_id serial PRIMARY KEY,           -- ILL request number
+               borrowernumber integer DEFAULT NULL,        -- Patron associated with request
+               biblio_id integer DEFAULT NULL,             -- Potential bib linked to request
+               branchcode varchar(50) NOT NULL,            -- The branch associated with the request
+               status varchar(50) DEFAULT NULL,            -- Current Koha status of request
+               placed date DEFAULT NULL,                   -- Date the request was placed
+               replied date DEFAULT NULL,                  -- Last API response
+               updated timestamp DEFAULT CURRENT_TIMESTAMP -- Last modification to request
+                 ON UPDATE CURRENT_TIMESTAMP,
+               completed date DEFAULT NULL,                -- Date the request was completed
+               medium varchar(30) DEFAULT NULL,            -- The Koha request type
+               accessurl varchar(500) DEFAULT NULL,        -- Potential URL for accessing item
+               cost varchar(20) DEFAULT NULL,              -- Cost of request
+               notesopac text DEFAULT NULL,                -- Patron notes attached to request
+               notesstaff text DEFAULT NULL,               -- Staff notes attached to request
+               orderid varchar(50) DEFAULT NULL,           -- Backend id attached to request
+               backend varchar(20) DEFAULT NULL,           -- The backend used to create request
+               CONSTRAINT `illrequests_bnfk`
+                 FOREIGN KEY (`borrowernumber`)
+                 REFERENCES `borrowers` (`borrowernumber`)
+                 ON UPDATE CASCADE ON DELETE CASCADE,
+               CONSTRAINT `illrequests_bcfk_2`
+                 FOREIGN KEY (`branchcode`)
+                 REFERENCES `branches` (`branchcode`)
+                 ON UPDATE CASCADE ON DELETE CASCADE
+           ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+        });
+    }
+
+    if ( !TableExists( 'illrequestattributes' ) ) {
+        $dbh->do(q{
+            CREATE TABLE illrequestattributes (
+                illrequest_id bigint(20) unsigned NOT NULL, -- ILL request number
+                type varchar(200) NOT NULL,                 -- API ILL property name
+                value text NOT NULL,                        -- API ILL property value
+                PRIMARY KEY  (`illrequest_id`,`type`),
+                CONSTRAINT `illrequestattributes_ifk`
+                  FOREIGN KEY (illrequest_id)
+                  REFERENCES `illrequests` (`illrequest_id`)
+                  ON UPDATE CASCADE ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+        });
+    }
+
+    # System preferences
+    $dbh->do(q{
+        INSERT IGNORE INTO systempreferences (variable,value,explanation,options,type) VALUES
+            ('ILLModule','0','If ON, enables the interlibrary loans module.','','YesNo');
+    });
+
+    $dbh->do(q{
+        INSERT IGNORE INTO systempreferences (variable,value,explanation,options,type) VALUES
+            ('ILLModuleCopyrightClearance','','70|10','Enter text to enable the copyright clearance stage of request creation. Text will be displayed','Textarea');
+    });
+    # userflags
+    $dbh->do(q{
+        INSERT IGNORE INTO userflags (bit,flag,flagdesc,defaulton) VALUES
+            (22,'ill','The Interlibrary Loans Module',0);
+    });
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 7317 - Add an Interlibrary Loan Module to Circulation and OPAC)\n";
+}
+
+$DBversion = '17.11.00.000';
+if( CheckVersion( $DBversion ) ) {
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Koha 17.11)\n";
+}
+
+$DBversion = '17.12.00.000';
+if( CheckVersion( $DBversion ) ) {
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Tē tōia, tē haumatia)\n";
+}
+
+$DBversion = '17.12.00.001';
+if( CheckVersion( $DBversion ) ) {
+    foreach my $table (qw(biblio_metadata deletedbiblio_metadata)) {
+        if (!column_exists($table, 'timestamp')) {
+            $dbh->do(qq{
+                ALTER TABLE `$table`
+                ADD COLUMN `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER `metadata`,
+                ADD KEY `timestamp` (`timestamp`)
+            });
+            $dbh->do(qq{
+                UPDATE $table metadata
+                    LEFT JOIN biblioitems ON (biblioitems.biblionumber = metadata.biblionumber)
+                    LEFT JOIN biblio ON (biblio.biblionumber = metadata.biblionumber)
+                SET metadata.timestamp = GREATEST(biblioitems.timestamp, biblio.timestamp);
+            });
+        }
+    }
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 19724 - Add [deleted]biblio_metadata.timestamp)\n";
+}
+
+$DBversion = '17.12.00.002';
+if( CheckVersion( $DBversion ) ) {
+
+    my $msss = $dbh->selectall_arrayref(q|
+        SELECT kohafield, tagfield, tagsubfield, frameworkcode
+        FROM marc_subfield_structure
+        WHERE   frameworkcode != ''
+    |, { Slice => {} });
+
+
+    my $sth = $dbh->prepare(q|
+        SELECT kohafield
+        FROM marc_subfield_structure
+        WHERE frameworkcode = ''
+        AND tagfield = ?
+        AND tagsubfield = ?
+    |);
+
+    my @exceptions;
+    for my $mss ( @$msss ) {
+        $sth->execute($mss->{tagfield}, $mss->{tagsubfield} );
+        my ( $default_kohafield ) = $sth->fetchrow_array();
+        if( $mss->{kohafield} ) {
+            push @exceptions, { frameworkcode => $mss->{frameworkcode}, tagfield => $mss->{tagfield}, tagsubfield => $mss->{tagsubfield}, kohafield => $mss->{kohafield} } if not $default_kohafield or $default_kohafield ne $mss->{kohafield};
+        } else {
+            push @exceptions, { frameworkcode => $mss->{frameworkcode}, tagfield => $mss->{tagfield}, tagsubfield => $mss->{tagsubfield}, kohafield => q{} } if $default_kohafield;
+        }
+    }
+
+    if (@exceptions) {
+        print "WARNING: The Default framework is now considered as authoritative for Koha to MARC mappings. We have found that your additional frameworks contained "
+          . scalar(@exceptions)
+          . " mapping(s) that deviate from the standard mappings. Please look at the following list and consider if you need to add them again in Default (possibly as a second mapping).\n";
+        for my $exception (@exceptions) {
+            print "Field "
+              . $exception->{tagfield} . '$'
+              . $exception->{tagsubfield}
+              . " in framework "
+              . $exception->{frameworkcode} . ': ';
+            if ( $exception->{kohafield} ) {
+                print "Mapping to "
+                  . $exception->{kohafield}
+                  . " has been adjusted.\n";
+            }
+            else {
+                print "Mapping has been reset.\n";
+            }
+        }
+
+        # Sync kohafield
+
+        # Clear the destination frameworks first
+        $dbh->do(q|
+            UPDATE marc_subfield_structure
+            SET kohafield = NULL
+            WHERE   frameworkcode > ''
+                AND     Kohafield > ''
+        |);
+
+        # Now copy from Default
+        my $msss = $dbh->selectall_arrayref(q|
+            SELECT kohafield, tagfield, tagsubfield
+            FROM marc_subfield_structure
+            WHERE   frameworkcode = ''
+                AND     kohafield > ''
+        |, { Slice => {} });
+        my $sth = $dbh->prepare(q|
+            UPDATE marc_subfield_structure
+            SET kohafield = ?
+            WHERE frameworkcode > ''
+            AND tagfield = ?
+            AND tagsubfield = ?
+        |);
+        for my $mss (@$msss) {
+            $sth->execute( $mss->{kohafield}, $mss->{tagfield},
+                $mss->{tagsubfield} );
+        }
+
+        # Clear the cache
+        my @frameworkcodes = $dbh->selectall_arrayref(q|
+            SELECT frameworkcode FROM biblio_framework WHERE frameworkcode > ''
+        |);
+        for my $frameworkcode (@frameworkcodes) {
+            Koha::Caches->get_instance->clear_from_cache("MarcSubfieldStructure-$frameworkcode");
+        }
+        Koha::Caches->get_instance->clear_from_cache("default_value_for_mod_marc-");
+    }
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 19096 - Make Default authoritative for Koha to MARC mappings)\n";
+}
+
+$DBversion = '17.12.00.003';
+if( CheckVersion( $DBversion ) ) {
+    $dbh->do(q|DROP TABLE IF EXISTS notifys|);
+
+    if( column_exists( 'accountlines', 'notify_id' ) ) {
+        $dbh->do(q|ALTER TABLE accountlines DROP COLUMN notify_id|);
+        $dbh->do(q|ALTER TABLE accountlines DROP COLUMN notify_level|);
+    }
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 10021 - Drop notifys-related table and columns)\n";
+}
+
+$DBversion = '17.12.00.004';
+if( CheckVersion( $DBversion ) ) {
+    $dbh->do(q{
+        INSERT IGNORE INTO systempreferences ( `variable`, `value`, `options`, `explanation`, `type` )
+        VALUES
+            ('RESTdefaultPageSize','20','','Set the default number of results returned by the REST API endpoints','Integer')
+    });
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 19278: Add a configurable default page size for REST endpoints)\n";
 }
 
 # DEVELOPER PROCESS, search for anything to execute in the db_update directory

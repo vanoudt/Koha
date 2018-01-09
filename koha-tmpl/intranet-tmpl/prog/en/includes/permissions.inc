@@ -20,6 +20,7 @@
     [%- CASE 'plugins' -%]<span>Koha plugins</span>
     [%- CASE 'lists' -%]<span>Lists</span>
     [%- CASE 'clubs' -%]<span>Patron clubs</span>
+    [%- CASE 'ill' -%]<span>Create and modify Interlibrary loan requests</span>
     [%- END -%]
 [%- END -%]
 
@@ -107,5 +108,6 @@
     [%- CASE 'edit_clubs' -%]<span>Create and edit clubs</span>
     [%- CASE 'edit_templates' -%]<span>Create and edit club templates</span>
     [%- CASE 'enroll' -%]<span>Enroll patrons in clubs</span>
+    [%- CASE 'edi_manage' -%]<span>Manage EDIFACT transmissions</span>
     [%- END -%]
 [%- END -%]

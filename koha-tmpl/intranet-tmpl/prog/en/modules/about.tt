@@ -1,4 +1,5 @@
 [% USE HtmlTags %]
+[% USE Koha %]
 [% SET footerjs = 1 %]
 [% INCLUDE 'doc-head-open.inc' %]
 <title>Koha &rsaquo; About Koha</title>
@@ -44,6 +45,31 @@
             <tr><th scope="row">Apache version: </th><td>[% apacheVersion |html %]</td></tr>
           [% IF (is_psgi) %]
             <tr><th scope="row">PSGI: </th><td>[% psgi_server |html %]</td></tr>
+          [% END %]
+          [% IF Koha.Preference('SearchEngine') == 'Elasticsearch' %]
+            <tr>
+                <th scope="row">Elasticsearch: </th>
+            [% IF elasticsearch_fatal_config_error %]
+                <td><span class="status_warn">[% elasticsearch_fatal_config_error %]</span></td>
+            [% ELSE %]
+                <td>
+                    Nodes:
+                    <span>[% elasticsearch_status.nodes.join(' / ') %]</span>
+                    |
+                    Status:
+                [% IF elasticsearch_status.running %]
+                    <span class="status_ok">running</span>
+                    |
+                    Indices:
+                  [% FOREACH index IN elasticsearch_status.indexes %]
+                      [% index.index_name %] (count: <emph>[% index.count %]</emph>)[% UNLESS loop.last %], [% END %]
+                  [% END %]
+                [% ELSE %]
+                    <span class="status_warn">not running</span>
+                [% END %]
+                </td>
+            [% END %]
+            </tr>
           [% END %]
             <tr><th scope="row">Memcached: </th>
                 <td>
@@ -131,7 +157,7 @@
         </div>
 
         <div id="sysinfo">
-    [% IF warnPrefBiblioAddsAuthorities || warnPrefEasyAnalyticalRecords || warnPrefAnonymousPatron || warnPrefAnonymousPatron_PatronDoesNotExist || warnNoActiveCurrency || QueryParserError || warnIsRootUser || xml_config_warnings.size || AutoSelfCheckPatronDoesNotHaveSelfCheckPerm || AutoSelfCheckPatronHasTooManyPerm || warnStatisticsFieldsError || warnNoTemplateCaching || has_ai_issues %]
+    [% IF warnPrefBiblioAddsAuthorities || warnPrefEasyAnalyticalRecords || warnPrefAnonymousPatron || warnPrefAnonymousPatron_PatronDoesNotExist || warnNoActiveCurrency || QueryParserError || warnIsRootUser || xml_config_warnings.size || AutoSelfCheckPatronDoesNotHaveSelfCheckPerm || AutoSelfCheckPatronHasTooManyPerm || warnStatisticsFieldsError || warnNoTemplateCaching || warnILLConfiguration || has_ai_issues %]
         [% IF (warnIsRootUser) %]
             <h2>Warning regarding current user</h2>
             <p>You are logged in as the database administrative user. This is not recommended because some parts of Koha will not function as expected when using this account.</p>
@@ -176,7 +202,7 @@
             <br/>
         [% END %]
 
-        [% IF warnPrefBiblioAddsAuthorities || warnPrefEasyAnalyticalRecords || warnPrefAnonymousPatron || warnPrefAnonymousPatron_PatronDoesNotExist || warnNoActiveCurrency || QueryParserError || AutoSelfCheckPatronDoesNotHaveSelfCheckPerm || AutoSelfCheckPatronHasTooManyPerm || warnStatisticsFieldsError || warnNoTemplateCaching %]
+        [% IF warnPrefBiblioAddsAuthorities || warnPrefEasyAnalyticalRecords || warnPrefAnonymousPatron || warnPrefAnonymousPatron_PatronDoesNotExist || warnNoActiveCurrency || QueryParserError || AutoSelfCheckPatronDoesNotHaveSelfCheckPerm || AutoSelfCheckPatronHasTooManyPerm || warnStatisticsFieldsError || warnNoTemplateCaching || warnILLConfiguration %]
             <h2>Warnings regarding the system configuration</h2>
             <table>
                 <caption>Preferences and parameters</caption>
@@ -225,6 +251,23 @@
                     You are missing the &lt;template_cache_dir&gt; entry in your koha-conf.xml file.
                     That will bring a performance boost to enable it.
                     </td></tr>
+                [% END %]
+                [% IF warnILLConfiguration %]
+                  [% IF no_ill_backends %]
+                    <tr><th scope="row"><b>Warning</b> </th><td>
+                    The ILL module is enabled, but there are no backends available.
+                    </td></tr>
+                  [% END %]
+                  [% IF ill_partner_code_not_defined %]
+                    <tr><th scope="row"><b>Warning</b> </th><td>
+                    The ILL module is enabled, but no 'partner_code' defined in koha-conf.xml. Falling back to the hardcoded 'ILLLIBS'.
+                    </td></tr>
+                  [%END %]
+                  [% IF ill_partner_code_doesnt_exist %]
+                    <tr><th scope="row"><b>Warning</b> </th><td>
+                    The ILL module is enabled, but the configured 'partner_code' ([% ill_partner_code_doesnt_exist %]) is not defined on the system.
+                    </td></tr>
+                  [% END %]
                 [% END %]
             </table>
         [% END %]
@@ -421,6 +464,7 @@
                 <li>Chloe Alabaster</li>
                 <li>Edward Allen</li>
                 <li>Francisco M. Marzoa Alonso</li>
+                <li>Morgane Alonso</li>
                 <li>Joseph Alway</li>
                 <li>Cindy Murdock Ames</li>
                 <li>Aleisha Amohia</li>
@@ -432,7 +476,7 @@
                 <li><a href="https://www.openhub.net/p/koha/contributors/6618544730094">Tomás Cohen Arazi (3.18 - 3.22 Release Manager; 3.12 Release Maintainer; 16.05 - 17.05 QA Team Member)</a></li>
                 <li><a href="https://www.openhub.net/p/koha/contributors/6620692124662">Andrew Arensburger (the small and great C4::Context module)</a></li>
                 <li>Alex Arnaud</li>
-                <li>Petter Goksoyr Asen</li>
+                <li>Petter Goksøyr Åsen</li>
                 <li><a href="https://www.openhub.net/p/koha/contributors/6618544614259">Joe Atzberger</a></li>
                 <li>Héctor Eduardo Castro Avalos</li>
                 <li>Larry Baerveldt</li>
@@ -451,13 +495,18 @@
                 <li>Pablo Bianchi</li>
                 <li>David Birmingham</li>
                 <li>Florian Bischof</li>
+                <li>Oliver Bock</li>
                 <li>Gaetan Boisson</li>
+                <li>David Bourgault</li>
+                <li>Rebecca Blundell</li>
                 <li>Danny Bouman</li>
                 <li>Christopher Brannon (3.20 QA Team Member)</li>
                 <li>Stan Brinkerhoff</li>
                 <li>Isaac Brodsky</li>
                 <li>Ivan Brown</li>
                 <li>Roger Buck</li>
+                <li>Alex Buckley</li>
+                <li>Michael Andrew Cabus</li>
                 <li>Steven Callender</li>
                 <li><a href="https://www.openhub.net/p/koha/contributors/6620692376789">Jared Camins-Esakov (3.12 Release Manager; 3.6 Release Maintainer)</a></li>
                 <li>Colin Campbell (3.4 QA Manager)</li>
@@ -480,6 +529,7 @@
                 <li>John Copeland</li>
                 <li><a href="https://www.openhub.net/p/koha/contributors/6618544609030">Chris Cormack (1.x, 3.4 and 3.6 Release Manager; 3.8, 3.10, 3.18 and 3.20 Release Maintainer; 3.2 Translation Manager; 3.14 QA Team Member; 17.05 Documentation Manager)</a></li>
                 <li>Jeremy Crabtree</li>
+                <li>Bonnie Crawford</li>
                 <li>Samuel Crosby</li>
                 <li>Christophe Croullebois</li>
                 <li>Olivier Crouzet</li>
@@ -493,6 +543,8 @@
                 <li><a href="https://www.openhub.net/p/koha/contributors/6620692210484">Frédéric Demians (3.4 - 3.10 Translation Manager; 3.20, 16.05 Release Maintainer)</a></li>
                 <li>Connor Dewar</li>
                 <li>Srikanth Dhondi</li>
+                <li>Leire Diez</li>
+                <li>Yarik</li>
                 <li>Rocio Dressler</li>
                 <li><a href="https://www.openhub.net/p/koha/contributors/6618545125093">Jonathan Druart (3.8 - 17.05 QA Team Member)</a></li>
                 <li>Serhij Dubyk</li>
@@ -524,6 +576,7 @@
                 <li>Clay Fouts</li>
                 <li>Brendon Ford</li>
                 <li>Claudia Forsman</li>
+                <li>Jessica Freeman</li>
                 <li>Corey Fuimaono</li>
                 <li>Marco Gaiarin</li>
                 <li>Pierrick Le Gall</li>
@@ -531,12 +584,16 @@
                 <li>Tumer Garip</li>
                 <li>Russel Garlick</li>
                 <li>Mark Gavillet</li>
-                <li>Claire Gravely</li>
                 <li>Daniel Kahn Gillmor</li>
                 <li>David Goldfein</li>
                 <li><a href="https://www.openhub.net/p/koha/contributors/6618544839606">Bernardo González Kriegel (3.14 - 17.05 Translation Manager; 3.10 Release Maintainer)</a></li>
+                <li>Caitlin Goodger</li>
+                <li>Claire Gravely</li>
                 <li>Briana Greally</li>
                 <li>Daniel Grobani</li>
+                <li>Victor Grousset</li>
+                <li>Isabel Grubi</li>
+                <li>David Gustafsson</li>
                 <li>Amit Gupta</li>
                 <li>Indranil Das Gupta</li>
                 <li>Michael Hafen</li>
@@ -558,10 +615,12 @@
                 <li>Morag Hills</li>
                 <li>Sèbastien Hinderer</li>
                 <li>Kristina D.C. Hoeppner</li>
+                <li>Stefan Berndtsson</li>
                 <li>Stephanie Hogan</li>
                 <li>Karl Holten</li>
                 <li>Daniel Holth</li>
                 <li>Andrew Hooper</li>
+                <li>Luke Honiss</li>
                 <li>Alexandra Horsman</li>
                 <li>Tom Houlker</li>
                 <li>Matthew Hunt</li>
@@ -572,20 +631,25 @@
                 <li>Srdjan Jankovic</li>
                 <li>Philippe Jaillon</li>
                 <li><a href="https://www.openhub.net/accounts/kohaaloha">Mason James (3.10 - 3.14 QA Team Member, 3.16, 16.05 Release Maintainer)</a></li>
+                <li>Karen Jen</li>
                 <li>Mike Johnson</li>
                 <li>Donovan Jones</li>
+                <li>Andreas Jonsson</li>
                 <li>Bart Jorgensen</li>
                 <li>Janusz Kaczmarek</li>
                 <li>Koustubha Kale</li>
                 <li>Pasi Kallinen</li>
+                <li>Dimitris Kamenopoulos</li>
                 <li>Peter Crellan Kelly</li>
                 <li>Jorgia Kelsey</li>
                 <li>Olli-Antti Kivilahti</li>
                 <li>Attila Kinali</li>
                 <li>Chris Kirby</li>
                 <li>Ulrich Kleiber</li>
+                <li>Jon Knight</li>
                 <li>Rafal Kopaczka</li>
                 <li>Piotr Kowalski</li>
+                <li>David Kuhn</li>
                 <li>Joonas Kylmälä</li>
                 <li><a href="https://www.openhub.net/p/koha/contributors/6618544614275">Henri-Damien Laurent (3.0 Release Maintainer)</a></li>
                 <li>Arnaud Laurin</li>
@@ -596,7 +660,10 @@
                 <li>Gynn Lomax</li>
                 <li>Peter Lorimer</li>
                 <li>Robert Lyon (Corporate Serials)</li>
+                <li>Ere Maijala</li>
+                <li>Sherryn Mak</li>
                 <li>Merllisia Manueli</li>
+                <li>Florent Mara</li>
                 <li>Francois Marier</li>
                 <li>Patricio Marrone</li>
                 <li>Jesse Maseto</li>
@@ -605,6 +672,7 @@
                 <li>Julian Maurice (3.18, 17.05 QA Team Member; 3.22 Release Maintainer)</li>
                 <li>Remi Mayrand-Provencher</li>
                 <li>Brig C. McCoy</li>
+                <li>Grace McKenzie</li>
                 <li>Tim McMahon</li>
                 <li>Dorian Meid (German translation)</li>
                 <li>Meenakshi. R</li>
@@ -624,6 +692,7 @@
                 <li>Mike Mylonas</li>
                 <li>Natasha ?? [Catalyst Academy]</li>
                 <li>Nadia Nicolaides</li>
+                <li>Nazlı</li>
                 <li>Joy Nelson</li>
                 <li><a href="https://www.openhub.net/p/koha/contributors/6618544615991">Chris Nighswonger (3.2 - 3.6 Release Maintainer)</a></li>
                 <li>Brian Norris</li>
@@ -632,14 +701,19 @@
                 <li>Albert Oller</li>
                 <li>Eric Olsen</li>
                 <li>H. Passini</li>
+                <li>Priya Patel</li>
                 <li>Aliki Pavlidou</li>
                 <li>Dobrica Pavlinusic</li>
                 <li>Maxime Pelletier</li>
                 <li>Shari Perkins</li>
                 <li>Martin Persson</li>
+                <li>Dominic Pichette</li>
                 <li>Fred Pierre</li>
+                <li>Eric Phetteplace (phette23)</li>
                 <li>Genevieve Plantin</li>
+                <li>Simon Pouchol</li>
                 <li>Polytechnic University</li>
+                <li>Pongtawat</li>
                 <li><a href="https://www.openhub.net/p/koha/contributors/6618544612249">Paul Poulain (2.0, 2.2, 3.8, 3.10 Release Manager; 2.2 Release Maintainer; 3.12 - 16.05 QA Team Member)</a></li>
                 <li>Karam Qubsi</li>
                 <li>Romina Racca</li>
@@ -649,6 +723,7 @@
                 <li>Allen Reinmeyer</li>
                 <li>Serge Renaux</li>
                 <li><a href="https://www.openhub.net/p/koha/contributors/6618544785220">Martin Renvoize (3.16 - 17.05 QA Team Member)</a></li>
+                <li>Francesco Rivetti</li>
                 <li>Abby Robertson</li>
                 <li>Waylon Robertson</li>
                 <li>Benjamin Rokseth</li>
@@ -663,16 +738,18 @@
                 <li>Viktor Sarge</li>
                 <li>Alex Sassmannshausen</li>
                 <li>Adrien Saurat</li>
+                <li>Zoe Schoeler</li>
                 <li>Dan Scott</li>
                 <li><a href="https://www.openhub.net/p/koha/contributors/6618544619438">Robin Sheat (3.2 - 3.22 Packaging Manager)</a></li>
                 <li>Juhani Seppälä</li>
                 <li>John Seymour</li>
                 <li>Juan Romay Sieira</li>
                 <li>Zach Sim</li>
-                <li>Radek Siman</li>
+                <li>Radek Šiman</li>
                 <li>Silvia Simonetti</li>
                 <li>Savitra Sirohi</li>
                 <li>Pawel Skuza (Polish for 1.2)</li>
+                <li>Emma Smith</li>
                 <li><a href="https://www.openhub.net/p/koha/contributors/6620692831733">Fridolin Somers (3.14 Release Maintainer, 17.05 QA Team Member)</a></li>
                 <li>Southeastern University</li>
                 <li>Martin Stenberg</li>
@@ -698,6 +775,8 @@
                 <li>Kathryn Tyree</li>
                 <li>Darrell Ulm</li>
                 <li>Universidad ORT Uruguay (Ernesto Silva, Andres Tarallo)</li>
+                <li>Eric Vantillard </li>
+                <li>Oleg Vasylenko</li>
                 <li><a href="https://www.openhub.net/p/koha/contributors/6618545408147">Marc Véron</a></li>
                 <li>Justin Vos</li>
                 <li>Aleksa Vujicic</li>
@@ -707,6 +786,7 @@
                 <li><a href="https://www.openhub.net/accounts/janewagner">Jane Wagner</a></li>
                 <li>Ward van Wanrooij</li>
                 <li><a href="https://www.openhub.net/accounts/pianohacker">Jesse Weaver (16.05, 16.11 QA Team Member)</a></li>
+                <li>Chris Weeks</li>
                 <li>Stefan Weil</li>
                 <li>Aaron Wells</li>
                 <li>Rick Welykochy</li>
@@ -717,6 +797,7 @@
                 <li>Robert Williams</li>
                 <li>James Winter</li>
                 <li>Lars Wirzenius</li>
+                <li>Baptiste Wojtkowski</li>
                 <li>Thomas Wright</li>
                 <li>Jen Zajac</li>
                 <li>Kenza Zaki</li>

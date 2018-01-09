@@ -52,7 +52,6 @@ use C4::CourseReserves qw(GetItemCourseReservesInfo);
 use Koha::Biblios;
 use Koha::RecordProcessor;
 use Koha::AuthorisedValues;
-use Koha::Biblios;
 use Koha::ItemTypes;
 use Koha::Acquisition::Orders;
 use Koha::Virtualshelves;
@@ -845,18 +844,15 @@ if ( C4::Context->preference('reviewson') ) {
         my $patron = Koha::Patrons->find( $review->{borrowernumber} );
 
         # setting some borrower info into this hash
-        $review->{title}     = $patron->title;
-        $review->{surname}   = $patron->surname;
-        $review->{firstname} = $patron->firstname;
-        if ( $libravatar_enabled and $patron->email ) {
-            $review->{avatarurl} = libravatar_url( email => $patron->email, https => $ENV{HTTPS} );
-        }
-        $review->{userid}     = $patron->userid;
-        $review->{cardnumber} = $patron->cardnumber;
+        if ( $patron ) {
+            $review->{patron} = $patron;
+            if ( $libravatar_enabled and $patron->email ) {
+                $review->{avatarurl} = libravatar_url( email => $patron->email, https => $ENV{HTTPS} );
+            }
 
-        if ( $patron->borrowernumber eq $borrowernumber ) {
-            $review->{your_comment} = 1;
-            $loggedincommenter = 1;
+            if ( $patron->borrowernumber eq $borrowernumber ) {
+                $loggedincommenter = 1;
+            }
         }
     }
 }
@@ -1103,13 +1099,14 @@ if (C4::Context->preference("OPACURLOpenInNewWindow")) {
     $template->param(covernewwindow => 'false');
 }
 
+$template->param(borrowernumber => $borrowernumber);
+
 if ( C4::Context->preference('OpacStarRatings') !~ /disable/ ) {
     my $ratings = Koha::Ratings->search({ biblionumber => $biblionumber });
     my $my_rating = $borrowernumber ? $ratings->search({ borrowernumber => $borrowernumber })->next : undef;
     $template->param(
         ratings => $ratings,
         my_rating => $my_rating,
-        borrowernumber => $borrowernumber
     );
 }
 

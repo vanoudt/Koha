@@ -128,6 +128,7 @@ sub BuildReport {
         z3950NormalizeAuthor
         SpineLabelAutoPrint
         SpineLabelShowPrintOnBibDetails
+        BlockReturnOfLostItems
         BlockReturnOfWithdrawnItems
         CalculateFinesOnReturn
         AgeRestrictionOverride
@@ -246,7 +247,6 @@ sub BuildReport {
         OPACShowCheckoutName
         OpacShowFiltersPulldownMobile
         OPACShowHoldQueueDetails
-        OpacShowLibrariesPulldownMobile
         OpacShowRecentComments
         OPACShowUnusedAuthorities
         OpacStarRatings
@@ -296,7 +296,6 @@ sub BuildReport {
         EnhancedMessagingPreferences
         ExtendedPatronAttributes
         intranetreadinghistory
-        memberofinstitution
         patronimages
         TalkingTechItivaPhoneNotification
         uppercasesurnames

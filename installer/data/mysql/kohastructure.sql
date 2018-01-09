@@ -1281,21 +1281,6 @@ CREATE TABLE `need_merge_authorities` ( -- keeping track of authority records st
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 --
--- Table structure for table `notifys`
---
-
-DROP TABLE IF EXISTS `notifys`;
-CREATE TABLE `notifys` (
-  `notify_id` int(11) NOT NULL default 0,
-  `borrowernumber` int(11) NOT NULL default 0,
-  `itemnumber` int(11) NOT NULL default 0,
-  `notify_date` date default NULL,
-  `notify_send_date` date default NULL,
-  `notify_level` int(1) NOT NULL default 0,
-  `method` varchar(20) NOT NULL default ''
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
-
---
 -- Table structure for table `oai_sets`
 --
 
@@ -2018,6 +2003,7 @@ CREATE TABLE `statistics` ( -- information related to transactions (circulation 
   `usercode` varchar(10) default NULL, -- unused in Koha
   `itemnumber` int(11) default NULL, -- foreign key from the items table, links transaction to a specific item
   `itemtype` varchar(10) default NULL, -- foreign key from the itemtypes table, links transaction to a specific item type
+  `location` varchar(80) default NULL, -- authorized value for the shelving location for this item (MARC21 952$c)
   `borrowernumber` int(11) default NULL, -- foreign key from the borrowers table, links transaction to a specific borrower
   `associatedborrower` int(11) default NULL, -- unused in Koha
   `ccode` varchar(10) default NULL, -- foreign key from the items table, links transaction to a specific collection code
@@ -2726,8 +2712,6 @@ CREATE TABLE `accountlines` (
   `amountoutstanding` decimal(28,6) default NULL,
   `lastincrement` decimal(28,6) default NULL,
   `timestamp` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP,
-  `notify_id` int(11) NOT NULL default 0,
-  `notify_level` int(2) NOT NULL default 0,
   `note` text NULL default NULL,
   `manager_id` int(11) NULL,
   PRIMARY KEY (`accountlines_id`),
@@ -3980,9 +3964,11 @@ CREATE TABLE biblio_metadata (
     `format` VARCHAR(16) NOT NULL,
     `marcflavour` VARCHAR(16) NOT NULL,
     `metadata` LONGTEXT NOT NULL,
+    `timestamp` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP,
     PRIMARY KEY(id),
     UNIQUE KEY `biblio_metadata_uniq_key` (`biblionumber`,`format`,`marcflavour`),
-    CONSTRAINT `record_metadata_fk_1` FOREIGN KEY (biblionumber) REFERENCES biblio (biblionumber) ON DELETE CASCADE ON UPDATE CASCADE
+    CONSTRAINT `record_metadata_fk_1` FOREIGN KEY (biblionumber) REFERENCES biblio (biblionumber) ON DELETE CASCADE ON UPDATE CASCADE,
+    KEY `timestamp` (`timestamp`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 --
@@ -3996,9 +3982,11 @@ CREATE TABLE deletedbiblio_metadata (
     `format` VARCHAR(16) NOT NULL,
     `marcflavour` VARCHAR(16) NOT NULL,
     `metadata` LONGTEXT NOT NULL,
+    `timestamp` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP,
     PRIMARY KEY(id),
     UNIQUE KEY `deletedbiblio_metadata_uniq_key` (`biblionumber`,`format`,`marcflavour`),
-    CONSTRAINT `deletedrecord_metadata_fk_1` FOREIGN KEY (biblionumber) REFERENCES deletedbiblio (biblionumber) ON DELETE CASCADE ON UPDATE CASCADE
+    CONSTRAINT `deletedrecord_metadata_fk_1` FOREIGN KEY (biblionumber) REFERENCES deletedbiblio (biblionumber) ON DELETE CASCADE ON UPDATE CASCADE,
+    KEY `timestamp` (`timestamp`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 --
@@ -4123,6 +4111,55 @@ CREATE TABLE IF NOT EXISTS club_fields (
   KEY club_id (club_id),
   CONSTRAINT club_fields_ibfk_3 FOREIGN KEY (club_template_field_id) REFERENCES club_template_fields (id) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT club_fields_ibfk_4 FOREIGN KEY (club_id) REFERENCES clubs (id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+--
+-- Table structure for table `illrequests`
+--
+
+DROP TABLE IF EXISTS `illrequests`;
+CREATE TABLE illrequests (
+    illrequest_id serial PRIMARY KEY,           -- ILL request number
+    borrowernumber integer DEFAULT NULL,        -- Patron associated with request
+    biblio_id integer DEFAULT NULL,             -- Potential bib linked to request
+    branchcode varchar(50) NOT NULL,            -- The branch associated with the request
+    status varchar(50) DEFAULT NULL,            -- Current Koha status of request
+    placed date DEFAULT NULL,                   -- Date the request was placed
+    replied date DEFAULT NULL,                  -- Last API response
+    updated timestamp DEFAULT CURRENT_TIMESTAMP -- Last modification to request
+      ON UPDATE CURRENT_TIMESTAMP,
+    completed date DEFAULT NULL,                -- Date the request was completed
+    medium varchar(30) DEFAULT NULL,            -- The Koha request type
+    accessurl varchar(500) DEFAULT NULL,        -- Potential URL for accessing item
+    cost varchar(20) DEFAULT NULL,              -- Cost of request
+    notesopac text DEFAULT NULL,                -- Patron notes attached to request
+    notesstaff text DEFAULT NULL,               -- Staff notes attached to request
+    orderid varchar(50) DEFAULT NULL,           -- Backend id attached to request
+    backend varchar(20) DEFAULT NULL,           -- The backend used to create request
+    CONSTRAINT `illrequests_bnfk`
+      FOREIGN KEY (`borrowernumber`)
+      REFERENCES `borrowers` (`borrowernumber`)
+      ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT `illrequests_bcfk_2`
+      FOREIGN KEY (`branchcode`)
+      REFERENCES `branches` (`branchcode`)
+      ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+--
+-- Table structure for table `illrequestattributes`
+--
+
+DROP TABLE IF EXISTS `illrequestattributes`;
+CREATE TABLE illrequestattributes (
+    illrequest_id bigint(20) unsigned NOT NULL, -- ILL request number
+    type varchar(200) NOT NULL,                 -- API ILL property name
+    value text NOT NULL,                        -- API ILL property value
+    PRIMARY KEY  (`illrequest_id`,`type`),
+    CONSTRAINT `illrequestattributes_ifk`
+      FOREIGN KEY (illrequest_id)
+      REFERENCES `illrequests` (`illrequest_id`)
+      ON UPDATE CASCADE ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

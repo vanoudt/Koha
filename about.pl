@@ -27,6 +27,8 @@ use List::MoreUtils qw/ any /;
 use LWP::Simple;
 use XML::Simple;
 use Config;
+use Search::Elasticsearch;
+use Try::Tiny;
 
 use C4::Output;
 use C4::Auth;
@@ -35,10 +37,15 @@ use C4::Installer;
 
 use Koha;
 use Koha::Acquisition::Currencies;
+use Koha::Patron::Categories;
 use Koha::Patrons;
 use Koha::Caches;
 use Koha::Config::SysPrefs;
+use Koha::Illrequest::Config;
+use Koha::SearchEngine::Elasticsearch;
+
 use C4::Members::Statistics;
+
 
 #use Smart::Comments '####';
 
@@ -260,6 +267,96 @@ if ( !defined C4::Context->config('use_zebra_facets') ) {
     }
 }
 
+# ILL module checks
+if ( C4::Context->preference('ILLModule') ) {
+    my $warnILLConfiguration = 0;
+    my $ill_config_from_file = C4::Context->config("interlibrary_loans");
+    my $ill_config = Koha::Illrequest::Config->new;
+
+    my $available_ill_backends =
+      ( scalar @{ $ill_config->available_backends } > 0 );
+
+    # Check backends
+    if ( !$available_ill_backends ) {
+        $template->param( no_ill_backends => 1 );
+        $warnILLConfiguration = 1;
+    }
+
+    # Check partner_code
+    if ( !Koha::Patron::Categories->find($ill_config->partner_code) ) {
+        $template->param( ill_partner_code_doesnt_exist => $ill_config->partner_code );
+        $warnILLConfiguration = 1;
+    }
+
+    if ( !$ill_config_from_file->{partner_code} ) {
+        # partner code not defined
+        $template->param( ill_partner_code_not_defined => 1 );
+        $warnILLConfiguration = 1;
+    }
+
+    $template->param( warnILLConfiguration => $warnILLConfiguration );
+}
+
+if ( C4::Context->preference('SearchEngine') eq 'Elasticsearch' ) {
+    # Check ES configuration health and runtime status
+
+    my $es_status;
+    my $es_config_error;
+    my $es_running = 1;
+
+    my $es_conf;
+    try {
+        $es_conf = Koha::SearchEngine::Elasticsearch::_read_configuration();
+    }
+    catch {
+        if ( ref($_) eq 'Koha::Exceptions::Config::MissingEntry' ) {
+            $template->param( elasticsearch_fatal_config_error => $_->message );
+            $es_config_error = 1;
+        }
+    };
+    if ( !$es_config_error ) {
+
+        my $biblios_index_name     = $es_conf->{index_name} . "_" . $Koha::SearchEngine::BIBLIOS_INDEX;
+        my $authorities_index_name = $es_conf->{index_name} . "_" . $Koha::SearchEngine::AUTHORITIES_INDEX;
+
+        my @indexes = ($biblios_index_name, $authorities_index_name);
+        # TODO: When new indexes get added, we could have other ways to
+        #       fetch the list of available indexes (e.g. plugins, etc)
+        $es_status->{nodes} = $es_conf->{nodes};
+        my $es = Search::Elasticsearch->new({ nodes => $es_conf->{nodes} });
+
+        foreach my $index ( @indexes ) {
+            my $count;
+            try {
+                $count = $es->indices->stats( index => $index )
+                      ->{_all}{primaries}{docs}{count};
+            }
+            catch {
+                if ( ref($_) eq 'Search::Elasticsearch::Error::Missing' ) {
+                    push @{ $es_status->{errors} }, "Index not found ($index)";
+                    $count = -1;
+                }
+                elsif ( ref($_) eq 'Search::Elasticsearch::Error::NoNodes' ) {
+                    $es_running = 0;
+                }
+                else {
+                    # TODO: when time comes, we will cover more use cases
+                    die $_;
+                }
+            };
+
+            push @{ $es_status->{indexes} },
+              {
+                index_name => $index,
+                count      => $count
+              };
+        }
+        $es_status->{running} = $es_running;
+
+        $template->param( elasticsearch_status => $es_status );
+    }
+}
+
 # Sco Patron should not contain any other perms than circulate => self_checkout
 if (  C4::Context->preference('WebBasedSelfCheck')
       and C4::Context->preference('AutoSelfCheckAllowed')
@@ -420,7 +517,7 @@ if ( open( my $file, "<:encoding(UTF-8)", "$docdir" . "/history.txt" ) ) {
     shift @lines; #remove header row
 
     foreach (@lines) {
-        my ( $date, $desc, $tag ) = split(/\t/);
+        my ( $epoch, $date, $desc, $tag ) = split(/\t/);
         if(!$desc && $date=~ /(?<=\d{4})\s+/) {
             ($date, $desc)= ($`, $');
         }

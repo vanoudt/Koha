@@ -122,10 +122,7 @@ __PAZPAR2_TOGGLE_XML_POST__
  <log4perl_conf>__KOHA_CONF_DIR__/log4perl.conf</log4perl_conf>
  <memcached_servers>__MEMCACHED_SERVERS__</memcached_servers>
  <memcached_namespace>__MEMCACHED_NAMESPACE__</memcached_namespace>
- <!-- Uncomment the following line if you want to use template caching
-      That will bring a performance boost
-      <template_cache_dir>/tmp</template_cache_dir>
- -->
+ <template_cache_dir>__TEMPLATE_CACHE_DIR__</template_cache_dir>
 
  <!-- Secret passphrase used by Mojolicious for signed cookies -->
  <api_secret_passphrase>CHANGEME</api_secret_passphrase>
@@ -152,6 +149,27 @@ __PAZPAR2_TOGGLE_XML_POST__
  <!-- Configuration for Plack -->
  <plack_max_requests>50</plack_max_requests>
  <plack_workers>2</plack_workers>
+
+ <interlibrary_loans>
+     <!-- Path to where Illbackends are located on the system
+          - This setting should normally not be touched -->
+     <backend_directory>__PERL_MODULE_DIR__/Koha/Illbackends</backend_directory>
+     <!-- How should we treat staff comments?
+          - hide: don't show in OPAC
+          - show: show in OPAC -->
+     <staff_request_comments>hide</staff_request_comments>
+     <!-- How should we treat the reply_date field?
+          - hide: don't show this field in the UI
+          - any other string: show, with this label -->
+     <reply_date>hide</reply_date>
+     <!-- Where should digital ILLs be sent?
+          - borrower: send it straight to the borrower email
+          - branch: send the ILL to the branch email -->
+     <digital_recipient>branch</digital_recipient>
+     <!-- What patron category should we use for p2p ILL requests?
+          - By default this is set to 'ILLLIBS' -->
+     <partner_code>ILLLIBS</partner_code>
+ </interlibrary_loans>
 
 </config>
 </yazgfs>

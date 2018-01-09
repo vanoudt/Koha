@@ -97,7 +97,7 @@ if ($writeoff_all) {
     writeoff_all(@names);
 } elsif ($writeoff_item) {
     my $accountlines_id = $input->param('accountlines_id');
-    my $amount       = $input->param('amountoutstanding');
+    my $amount       = $input->param('amountwrittenoff');
     my $payment_note = $input->param("payment_note");
 
     Koha::Account->new( { patron_id => $borrowernumber } )->pay(
@@ -123,7 +123,6 @@ for (@names) {
 
 $template->param(
     finesview => 1,
-    RoutingSerials => C4::Context->preference('RoutingSerials'),
 );
 
 add_accounts_to_template();
@@ -133,21 +132,17 @@ output_html_with_http_headers $input, $cookie, $template->output;
 sub add_accounts_to_template {
 
     my ( $total, undef, undef ) = GetMemberAccountRecords($borrowernumber);
-    my $accounts = [];
-    my @notify   = NumberNotifyId($borrowernumber);
-
-    my $notify_groups = [];
-    for my $notify_id (@notify) {
-        my ( $acct_total, $accountlines, undef ) =
-          GetBorNotifyAcctRecord( $borrowernumber, $notify_id );
-        if ( @{$accountlines} ) {
-            my $totalnotify = AmountNotify( $notify_id, $borrowernumber );
-            push @{$accounts},
-              { accountlines => $accountlines,
-                notify       => $notify_id,
-                total        => $totalnotify,
-              };
+    my $account_lines = Koha::Account::Lines->search({ borrowernumber => $borrowernumber, amountoutstanding => { '!=' => 0 } }, { order_by => ['accounttype'] });
+    my @accounts;
+    while ( my $account_line = $account_lines->next ) {
+        $account_line = $account_line->unblessed;
+        if ( $account_line->{itemnumber} ) {
+            my $item = Koha::Items->find( $account_line->{itemnumber} );
+            my $biblio = $item->biblio;
+            $account_line->{biblionumber} = $biblio->biblionumber;
+            $account_line->{title}        = $biblio->title;
         }
+        push @accounts, $account_line;
     }
     borrower_add_additional_fields($borrower);
 
@@ -156,7 +151,7 @@ sub add_accounts_to_template {
     my $patron_image = Koha::Patron::Images->find($borrower->{borrowernumber});
     $template->param( picture => 1 ) if $patron_image;
     $template->param(
-        accounts => $accounts,
+        accounts => \@accounts,
         borrower => $borrower,
         categoryname => $borrower->{'description'},
         total    => $total,
@@ -196,8 +191,6 @@ sub redirect_to_paycollect {
     $redirect .= get_for_redirect( 'description', "description$line_no", 0 );
     $redirect .= get_for_redirect( 'title', "title$line_no", 0 );
     $redirect .= get_for_redirect( 'itemnumber',   "itemnumber$line_no",   0 );
-    $redirect .= get_for_redirect( 'notify_id',    "notify_id$line_no",    0 );
-    $redirect .= get_for_redirect( 'notify_level', "notify_level$line_no", 0 );
     $redirect .= get_for_redirect( 'accountlines_id', "accountlines_id$line_no", 0 );
     $redirect .= q{&} . 'payment_note' . q{=} . uri_escape_utf8( scalar $input->param("payment_note_$line_no") );
     $redirect .= '&remote_user=';
