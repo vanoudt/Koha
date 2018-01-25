@@ -160,9 +160,9 @@
                             <a href="#" class="btn btn-warning" id="externalaccounts" onclick="$('#auth').slideToggle();" style="color: #fff; margin-bottom: 2em;">Non-Student sign in</a>
                         [% END # /End googleopenidconnect %]
                         [% IF SCO_login %]
-                            <form action="/cgi-bin/koha/sco/sco-main.pl" name="auth" id="auth" method="post">
+                            <form action="/cgi-bin/koha/sco/sco-main.pl" name="auth" id="auth" method="post" autocomplete="off">
                         [% ELSE %]
-                            <form action="[% script_name %]" name="auth" id="auth" method="post">
+                            <form action="[% script_name %]" name="auth" id="auth" method="post" autocomplete="off">
                         [% END %]
                             <input type="hidden" name="koha_login_context" value="opac" />
                             <fieldset class="brief">

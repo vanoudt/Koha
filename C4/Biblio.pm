@@ -2698,10 +2698,18 @@ sub _adjust_pubyear {
     # modify return value to keep only the 1st year found
     if( $retval =~ m/c(\d\d\d\d)/ and $1 > 0 ) { # search cYYYY first
         $retval = $1;
-    } else {
-        # if no cYYYY, get the 1st date.
-        $retval =~ m/(\d\d\d\d)/;
+    } elsif( $retval =~ m/(\d\d\d\d)/ && $1 > 0 ) {
         $retval = $1;
+    } elsif( $retval =~ m/
+             (?<year>\d)[-]?[.Xx?]{3}
+            |(?<year>\d{2})[.Xx?]{2}
+            |(?<year>\d{3})[.Xx?]
+            |(?<year>\d)[-]{3}\?
+            |(?<year>\d\d)[-]{2}\?
+            |(?<year>\d{3})[-]\?
+    /xms ) { # the form 198-? occurred in Dutch ISBD rules
+        my $digits = $+{year};
+        $retval = $digits * ( 10 ** ( 4 - length($digits) ));
     }
     return $retval;
 }
