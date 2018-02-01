@@ -103,7 +103,3 @@
 			[% END %]
 		[% END %]
    	</ul>
-<span class="menusection">PBC Account</span>
-	<ul class="menu-collapse">
-		<li><a id="quota_link" href="http://quota.pbcstudents.pbc.wa.edu.au:8999">Internet Quota</a>
-	</ul>
