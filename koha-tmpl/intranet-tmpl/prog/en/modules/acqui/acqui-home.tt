@@ -4,8 +4,8 @@
 [% INCLUDE 'doc-head-open.inc' %]
 <title>Koha &rsaquo; Acquisitions</title>
 [% INCLUDE 'doc-head-close.inc' %]
-<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables.css" />
-<link href="[% interface %]/lib/jquery/plugins/treetable/stylesheets/jquery.treetable.css" rel="stylesheet" type="text/css" />
+<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables_[% KOHA_VERSION %].css" />
+<link href="[% interface %]/lib/jquery/plugins/treetable/stylesheets/jquery.treetable_[% KOHA_VERSION %].css" rel="stylesheet" type="text/css" />
 </head>
 
 <body id="acq_acqui-home" class="acq">
@@ -114,8 +114,8 @@
                     [% END %]
                 </td>
                 <td>[% loop_budge.budget_name %]</td>
-                <td>[% IF ( loop_budge.budget_owner_borrowernumber ) %]
-                        <a href="/cgi-bin/koha/members/moremember.pl?borrowernumber=[% loop_budge.budget_owner_borrowernumber %]">[% loop_budge.budget_owner_surname %], [% loop_budge.budget_owner_firstname %]</a>
+                <td>[% IF ( loop_budge.budget_owner ) %]
+                        <a href="/cgi-bin/koha/members/moremember.pl?borrowernumber=[% loop_budge.budget_owner.borrowernumber %]">[% loop_budge.budget_owner.surname %], [% loop_budge.budget_owner.firstname %]</a>
                     [% ELSE %]
                         &nbsp;
                     [% END %]
@@ -169,8 +169,8 @@
 
 [% MACRO jsinclude BLOCK %]
     [% INCLUDE 'datatables.inc' %]
-    <script type="text/javascript" src="[% interface %]/lib/jquery/plugins/treetable/jquery.treetable.js"></script>
-    <script type="text/javascript" src="[% interface %]/[% theme %]/js/acquisitions-menu.js"></script>
+    <script type="text/javascript" src="[% interface %]/lib/jquery/plugins/treetable/jquery.treetable_[% KOHA_VERSION %].js"></script>
+    <script type="text/javascript" src="[% interface %]/[% theme %]/js/acquisitions-menu_[% KOHA_VERSION %].js"></script>
     <script type="text/javascript">
         dt_overwrite_html_sorting_localeCompare();
 

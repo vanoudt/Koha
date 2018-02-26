@@ -53,9 +53,9 @@ use C4::SocialData;
 use C4::External::OverDrive;
 
 use Koha::ItemTypes;
-use Koha::LibraryCategories;
 use Koha::Ratings;
 use Koha::Virtualshelves;
+use Koha::Library::Groups;
 
 use POSIX qw(ceil floor strftime);
 use URI::Escape;
@@ -214,8 +214,8 @@ if ($cgi->cookie("search_path_code")) {
     }
 }
 
-my $library_categories = Koha::LibraryCategories->search( { categorytype => 'searchdomain' }, { order_by => [ 'categorytype', 'categorycode' ] } );
-$template->param( searchdomainloop => $library_categories );
+my @search_groups = Koha::Library::Groups->get_search_groups();
+$template->param( search_groups => \@search_groups );
 
 # load the language limits (for search)
 my $languages_limit_loop = getLanguages($lang, 1);
@@ -226,7 +226,10 @@ my $itemtypes = GetItemTypesCategorized;
 # add translated_description to itemtypes
 foreach my $itemtype ( keys %{$itemtypes} ) {
     # Itemtypes search categories don't have (yet) translated descriptions, they are auth values (and could still have no descriptions too BZ 18400)
-    my $translated_description = Koha::ItemTypes->find( $itemtype )->translated_description;
+    # If 'iscat' (see ITEMTYPECAT) then there is no itemtype and the description is not translated
+    my $translated_description = $itemtypes->{$itemtype}->{iscat}
+      ? $itemtypes->{$itemtype}->{description}
+      : Koha::ItemTypes->find($itemtype)->translated_description;
     $itemtypes->{$itemtype}->{translated_description} = $translated_description || $itemtypes->{$itemtype}->{description} || q{};
 }
 
@@ -491,8 +494,8 @@ if (@searchCategories > 0) {
 @limits = map { uri_unescape($_) } @limits;
 
 if($params->{'multibranchlimit'}) {
-    my $library_category = Koha::LibraryCategories->find( $params->{multibranchlimit} );
-    my @libraries = $library_category->libraries;
+    my $search_group = Koha::Library::Groups->find( $params->{multibranchlimit} );
+    my @libraries = $search_group->all_libraries;
     my $multibranch = '('.join( " or ", map { 'branch: ' . $_->id } @libraries ) .')';
     push @limits, $multibranch if ($multibranch ne  '()');
 }
@@ -611,7 +614,7 @@ if ($tag) {
 }
 
 # use Data::Dumper; print STDERR "-" x 25, "\n", Dumper($results_hashref);
-if ($@ || $error) {
+if (not $tag and ( $@ || $error)) {
     $template->param(query_error => $error.$@);
     output_html_with_http_headers $cgi, $cookie, $template->output;
     exit;

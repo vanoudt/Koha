@@ -10,9 +10,10 @@
 [% INCLUDE 'adv-search.inc' %]
 <div id="breadcrumbs"><a href="/cgi-bin/koha/mainpage.pl">Home</a> &rsaquo; Advanced search</div>
 
-<div id="doc" class="yui-t7">
-   <div id="bd">
-	
+<div class="main container-fluid">
+    <div class="row">
+        <div class="col-md-10 col-md-offset-1 col-lg-8 col-lg-offset-2">
+
 <form action="search.pl" method="get">
 <div id="advanced-search">
 <h1>Advanced search</h1>
@@ -96,7 +97,6 @@
 
 </div>
 <!-- MC-TYPE LIMITS -->
-    <div class="yui-g">
       <div id="advsearches" class="toptabs">
       <ul>
       [% FOREACH advsearchloo IN advancedsearchesloop %]
@@ -242,14 +242,20 @@
         [% PROCESS options_for_libraries prefix => "branch:" libraries => Branches.all( selected => selected_branchcode, unfiltered => 1 ) %]
         </select></p>
     <!-- <input type="hidden" name="limit" value="branch: MAIN" /> -->
-        [% IF searchdomainloop.count %]
-    <p>OR</p> <!-- should addjs to grey out group pulldown if a library is selected. -->
-        <p><label for="categoryloop">Groups of libraries: </label><select name="multibranchlimit" id="categoryloop">
-        <option value=""> -- none -- </option>
-        [% FOREACH searchdomainloo IN searchdomainloop %]
-        <option value="[% searchdomainloo.categorycode %]">[% searchdomainloo.categoryname %]</option>
-        [% END %]
-        </select></p>
+        [% IF search_groups %]
+            <p>OR</p> <!-- should addjs to grey out group pulldown if a library is selected. -->
+
+            <p>
+                <label for="categoryloop">Groups of libraries: </label>
+                <select name="multibranchlimit" id="categoryloop">
+                    <option value=""> -- none -- </option>
+                    [% FOREACH sg IN search_groups %]
+                        [% UNLESS sg.branchcode %]
+                            <option value="[% sg.id %]">[% sg.title %]</option>
+                        [% END %]
+                    [% END %]
+                </select>
+            </p>
     [% END %]
 </fieldset>
     </fieldset>
@@ -263,14 +269,14 @@
     </select>
         </p>
 </fieldset>
+</div>
 <!-- /RANK LIMITS -->
-</div>
-</div>
 </form>
+</div>
 </div>
 
 [% MACRO jsinclude BLOCK %]
-    <script type="text/javascript" src="[% interface %]/lib/jquery/plugins/jquery.fixFloat.js"></script>
+    <script type="text/javascript" src="[% interface %]/lib/jquery/plugins/jquery.fixFloat_[% KOHA_VERSION %].js"></script>
     <script type="text/JavaScript">
         /**
          *  Function add_field();

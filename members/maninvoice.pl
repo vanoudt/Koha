@@ -22,8 +22,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
-use strict;
-use warnings;
+use Modern::Perl;
 
 use C4::Auth;
 use C4::Output;
@@ -38,7 +37,7 @@ use Koha::Patrons;
 use Koha::Patron::Categories;
 
 my $input=new CGI;
-my $flagsrequired = { borrowers => 1 };
+my $flagsrequired = { borrowers => 'edit_borrowers' };
 
 my $borrowernumber=$input->param('borrowernumber');
 
@@ -51,7 +50,8 @@ unless ( $patron ) {
 my $add=$input->param('add');
 if ($add){
     if ( checkauth( $input, 0, $flagsrequired, 'intranet' ) ) {
-        #  print $input->header;
+        # Note: If the logged in user is not allowed to see this patron an invoice can be forced
+        # Here we are trusting librarians not to hack the system
         my $barcode=$input->param('barcode');
         my $itemnum;
         if ($barcode) {
@@ -89,11 +89,14 @@ if ($add){
         query           => $input,
         type            => "intranet",
         authnotrequired => 0,
-        flagsrequired   => { borrowers => 1,
+        flagsrequired   => { borrowers => 'edit_borrowers',
                              updatecharges => 'remaining_permissions' },
         debug           => 1,
     });
-					
+
+    my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+    output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
+
   # get authorised values with type of MANUAL_INV
   my @invoice_types;
   my $dbh = C4::Context->dbh;
@@ -104,14 +107,11 @@ if ($add){
   }
   $template->param( invoice_types_loop => \@invoice_types );
 
-    if ( $patron->category->category_type eq 'C') {
+    if ( $patron->is_child ) {
         my $patron_categories = Koha::Patron::Categories->search_limited({ category_type => 'A' }, {order_by => ['categorycode']});
         $template->param( 'CATCODE_MULTI' => 1) if $patron_categories->count > 1;
         $template->param( 'catcode' => $patron_categories->next->categorycode )  if $patron_categories->count == 1;
     }
-
-    $template->param( adultborrower => 1 ) if ( $patron->category->category_type =~ /^(A|I)$/ );
-    $template->param( picture => 1 ) if $patron->image;
 
     if (C4::Context->preference('ExtendedPatronAttributes')) {
         my $attributes = GetBorrowerAttributes($borrowernumber);
@@ -121,12 +121,9 @@ if ($add){
         );
     }
 
-    $template->param(%{ $patron->unblessed });
     $template->param(
+        patron         => $patron,
         finesview      => 1,
-        borrowernumber => $borrowernumber,
-        categoryname   => $patron->category->description,
-        is_child       => ($patron->category->category_type eq 'C'),
     );
     output_html_with_http_headers $input, $cookie, $template->output;
 }

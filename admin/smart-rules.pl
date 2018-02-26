@@ -17,8 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
-use strict;
-use warnings;
+use Modern::Perl;
 use CGI qw ( -utf8 );
 use C4::Context;
 use C4::Output;
@@ -297,7 +296,7 @@ elsif ($op eq "add-branch-cat") {
                     maxonsiteissueqty = ?
                 WHERE categorycode = ?
             |);
-            $sth_search->execute($branch);
+            $sth_search->execute($categorycode);
             my $res = $sth_search->fetchrow_hashref();
             if ($res->{total}) {
                 $sth_update->execute($maxissueqty, $maxonsiteissueqty, $categorycode);

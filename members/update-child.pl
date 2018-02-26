@@ -26,8 +26,7 @@
 
 =cut
 
-use strict;
-#use warnings; FIXME - Bug 2505
+use Modern::Perl;
 use CGI qw ( -utf8 );
 use C4::Context;
 use C4::Auth;
@@ -47,7 +46,7 @@ my ( $template, $loggedinuser, $cookie ) = get_template_and_user(
         query           => $input,
         type            => "intranet",
         authnotrequired => 0,
-        flagsrequired   => { borrowers => 1 },
+        flagsrequired   => { borrowers => 'edit_borrowers' },
         debug           => 1,
     }
 );
@@ -57,6 +56,8 @@ my $catcode        = $input->param('catcode');
 my $cattype        = $input->param('cattype');
 my $catcode_multi = $input->param('catcode_multi');
 my $op             = $input->param('op');
+
+my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
 
 if ( $op eq 'multi' ) {
     # FIXME - what are the possible upgrade paths?  C -> A , C -> S ...
@@ -72,11 +73,9 @@ if ( $op eq 'multi' ) {
 }
 
 elsif ( $op eq 'update' ) {
-    my $patron = Koha::Patrons->find( $borrowernumber );
-    unless ( $patron ) {
-        print $input->redirect("/cgi-bin/koha/circ/circulation.pl?borrowernumber=$borrowernumber");
-        exit;
-    }
+    my $patron         = Koha::Patrons->find( $borrowernumber );
+    output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
+
     my $member = $patron->unblessed;
     $member->{'guarantorid'}  = 0;
     $member->{'categorycode'} = $catcode;

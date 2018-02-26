@@ -494,6 +494,7 @@
                 <li>Natalie Bennison</li>
                 <li>John Beppu</li>
                 <li>Pablo Bianchi</li>
+                <li>Chad Billman</li>
                 <li>David Birmingham</li>
                 <li>Florian Bischof</li>
                 <li>Oliver Bock</li>
@@ -789,6 +790,7 @@
                 <li>Ian Walls (3.6 - 3.10 QA Manager)</li>
                 <li><a href="https://www.openhub.net/accounts/janewagner">Jane Wagner</a></li>
                 <li>Ward van Wanrooij</li>
+                <li>Jenny Way</li>
                 <li><a href="https://www.openhub.net/accounts/pianohacker">Jesse Weaver (16.05, 16.11 QA Team Member)</a></li>
                 <li>Chris Weeks</li>
                 <li>Stefan Weil</li>
@@ -952,6 +954,9 @@
 
             <h2>Leaflet</h2>
             <p>The <a href="http://leafletjs.com">Leaflet</a> JavaScript library by Vladimir Agafonkinis licensed under the <a href="https://github.com/Leaflet/Leaflet/blob/master/LICENSE">BSD License</a>.</p>
+
+            <h2>jquery.emojiarea.js</h2>
+            <p>The <a href="https://github.com/diy/jquery-emojiarea">Emojiarea plug-in for jQuery</a> by DIY Co is licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">the Apache License, Version 2.0</a>.</p>
         </div>
 
         <div id="translations">

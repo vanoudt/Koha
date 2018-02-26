@@ -278,10 +278,6 @@ is a reference-to-hash which may have any of the following keys:
 
 There is no item in the catalog with the given barcode. The value is C<$barcode>.
 
-=item C<IsPermanent>
-
-The item's home branch is permanent. This doesn't prevent the item from being transferred, though. The value is the code of the item's home branch.
-
 =item C<DestinationEqualsHolding>
 
 The item is already at the branch to which it is being transferred. The transfer is nonetheless considered to have failed. The value should be ignored.
@@ -334,15 +330,6 @@ sub transferbook {
             $messages->{'NotAllowed'} = $tbr . "::" . $code;
             $dotransfer = 0;
         }
-    }
-
-    # if is permanent...
-    # FIXME Is this still used by someone?
-    # See other FIXME in AddReturn
-    my $library = Koha::Libraries->find($hbr);
-    if ( $library and $library->get_categories->search({'me.categorycode' => 'PE'})->count ) {
-        $messages->{'IsPermanent'} = $hbr;
-        $dotransfer = 0;
     }
 
     # can't transfer book if is already there....
@@ -749,16 +736,9 @@ sub CanBookBeIssued {
             $issuingimpossible{DEBARRED} = 1;
         }
     }
-    if ( !defined $patron->dateexpiry || $patron->dateexpiry eq '0000-00-00') {
+
+    if ( $patron->is_expired ) {
         $issuingimpossible{EXPIRED} = 1;
-    } else {
-        my $expiry_dt = dt_from_string( $patron->dateexpiry, 'sql', 'floating' );
-        $expiry_dt->truncate( to => 'day');
-        my $today = $now->clone()->truncate(to => 'day');
-        $today->set_time_zone( 'floating' );
-        if ( DateTime->compare($today, $expiry_dt) == 1 ) {
-            $issuingimpossible{EXPIRED} = 1;
-        }
     }
 
     #
@@ -1768,12 +1748,6 @@ No item with this barcode exists. The value is C<$barcode>.
 
 The book is not currently on loan. The value is C<$barcode>.
 
-=item C<IsPermanent>
-
-The book's home branch is a permanent collection. If you have borrowed
-this book, you are not allowed to return it. The value is the code for
-the book's home branch.
-
 =item C<withdrawn>
 
 This book has been withdrawn/cancelled. The value should be ignored.
@@ -1885,16 +1859,6 @@ sub AddReturn {
                     last;
                 }
             }
-        }
-    }
-
-
-    # check if the book is in a permanent collection....
-    # FIXME -- This 'PE' attribute is largely undocumented.  afaict, there's no user interface that reflects this functionality.
-    if ( $returnbranch ) {
-        my $library = Koha::Libraries->find($returnbranch);
-        if ( $library and $library->get_categories->search({'me.categorycode' => 'PE'})->count ) {
-            $messages->{'IsPermanent'} = $returnbranch;
         }
     }
 
@@ -2553,12 +2517,15 @@ sub GetUpcomingDueIssues {
     my $dbh = C4::Context->dbh;
 
     my $statement = <<END_SQL;
-SELECT issues.*, items.itype as itemtype, items.homebranch, TO_DAYS( date_due )-TO_DAYS( NOW() ) as days_until_due, branches.branchemail
-FROM issues 
-LEFT JOIN items USING (itemnumber)
-LEFT OUTER JOIN branches USING (branchcode)
-WHERE returndate is NULL
-HAVING days_until_due >= 0 AND days_until_due <= ?
+SELECT *
+FROM (
+    SELECT issues.*, items.itype as itemtype, items.homebranch, TO_DAYS( date_due )-TO_DAYS( NOW() ) as days_until_due, branches.branchemail
+    FROM issues
+    LEFT JOIN items USING (itemnumber)
+    LEFT OUTER JOIN branches USING (branchcode)
+    WHERE returndate is NULL
+) tmp
+WHERE days_until_due >= 0 AND days_until_due <= ?
 END_SQL
 
     my @bind_parameters = ( $params->{'days_in_advance'} );
@@ -3972,6 +3939,7 @@ sub GetTopIssues {
 
     my $dbh = C4::Context->dbh;
     my $query = q{
+        SELECT * FROM (
         SELECT b.biblionumber, b.title, b.author, bi.itemtype, bi.publishercode,
           bi.place, bi.publicationyear, b.copyrightdate, bi.pages, bi.size,
           i.ccode, SUM(i.issues) AS count
@@ -4009,11 +3977,13 @@ sub GetTopIssues {
     }
 
     $query .= q{
-        GROUP BY b.biblionumber
-        HAVING count > 0
+        GROUP BY b.biblionumber, b.title, b.author, bi.itemtype, bi.publishercode,
+          bi.place, bi.publicationyear, b.copyrightdate, bi.pages, bi.size,
+          i.ccode
         ORDER BY count DESC
     };
 
+    $query .= q{ ) xxx WHERE count > 0 };
     $count = int($count);
     if ($count > 0) {
         $query .= "LIMIT $count";

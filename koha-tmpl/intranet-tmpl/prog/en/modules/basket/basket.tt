@@ -32,12 +32,15 @@
     @import url([% interface %]/[% theme %]/css/print.css);
 </style>
     [% ELSE %][% INCLUDE 'doc-head-close.inc' %]
-<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables.css" />
+<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables_[% KOHA_VERSION %].css" />
 	[% END %]
 </head>
 [% IF ( print_basket ) %]<body id="cart_basket" class="cart" onload="print();history.back();">[% ELSE %]<body id="cart_basket" class="cart">[% END %]
 
-<div id="doc" class="yui-t7">
+<div class="main container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+
 <div class="container">
 [% UNLESS ( print_basket ) %]
 <h1>Your cart</h1>
@@ -285,13 +288,15 @@
     <input type="hidden" name="records" id="records" />
 </form>
 
-</div>
+            </div>
+        </div>
+    </div>
 </div>
             [% INCLUDE js_includes.inc %]
             [% UNLESS ( print_basket ) %]
                 [% INCLUDE 'datatables.inc' %]
-                <script type="text/javascript" src="[% interface %]/[% theme %]/js/cart.js"></script>
-                <script type="text/javascript" src="[% interface %]/lib/jquery/plugins/jquery.checkboxes.min.js"></script>
+                <script type="text/javascript" src="[% interface %]/[% theme %]/js/cart_[% KOHA_VERSION %].js"></script>
+                <script type="text/javascript" src="[% interface %]/lib/jquery/plugins/jquery.checkboxes.min_[% KOHA_VERSION %].js"></script>
             [% END %]
     </body>
 </html>

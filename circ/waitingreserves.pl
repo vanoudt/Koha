@@ -18,8 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
-use strict;
-use warnings;
+use Modern::Perl;
 use CGI qw ( -utf8 );
 use C4::Context;
 use C4::Output;
@@ -131,11 +130,7 @@ while ( my $hold = $holds->next ) {
         $getreserv{'dotransfer'} = 1;
     }
 
-    my $borEmail = $patron->first_valid_email_address;
-
-    if ( $borEmail ) {
-        $getreserv{'borrowermail'}  = $borEmail;
-    }
+    $getreserv{patron} = $patron;
 
     if ($today > $calcDate) {
         if ($cancelall) {

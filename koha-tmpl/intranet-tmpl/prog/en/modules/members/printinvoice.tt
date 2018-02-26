@@ -1,10 +1,12 @@
 [% USE Koha %]
+[% USE Branches %]
+[% SET footerjs = 1 %]
 [% INCLUDE 'doc-head-open.inc' %]
-<title>Print receipt for [% cardnumber %]</title>
+<title>Print receipt for [% patron.cardnumber %]</title>
 [% INCLUDE 'doc-head-close.inc' %]
-<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/printreceiptinvoice.css" />
-[% INCLUDE 'slip-print.inc' #printThenClose %]
+<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/printreceiptinvoice_[% KOHA_VERSION %].css" />
 </head>
+
 <body id="printinvoice" class="pat">
 
 <div id="receipt">
@@ -24,13 +26,13 @@
   </tr>
   <tr>
     <th colspan="5" class="centerednames">
-		[% IF ( branchname ) %]<h2>[% branchname %]</h2>[% END %]
+        <h2>[% Branches.GetName( patron.branchcode ) %]</h2>
 	</th>
   </tr>
   <tr>
     <th colspan="5" >
-        Bill to: [% firstname %] [% surname %] <br />
-        Card number: [% cardnumber %]<br />
+        Bill to: [% patron.firstname %] [% patron.surname %] <br />
+        Card number: [% patron.cardnumber %]<br />
 	</th>
   </tr>
   <tr>
@@ -74,4 +76,9 @@
   </tfoot>
 </table>
 </div>
+
+[% MACRO jsinclude BLOCK %]
+    [% INCLUDE 'slip-print.inc' #printThenClose %]
+[% END %]
+
 [% INCLUDE 'intranet-bottom.inc' %]

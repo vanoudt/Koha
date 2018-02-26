@@ -1,5 +1,5 @@
 [% #Enable tinymce for system preferences %]
-<script type="text/javascript" src="[% interface %]/lib/tiny_mce/tiny_mce.js"></script>
+<script type="text/javascript" src="[% interface %]/lib/tiny_mce/tiny_mce_[% KOHA_VERSION %].js"></script>
 <script>
 
 [%# Save TinyMCE content and trigger an event on the original element %]
@@ -9,6 +9,7 @@ function wysiwyg_change (ed){
     $(original_textarea).trigger("input");
 }
 
+tinyMCE.baseURL = "[% interface %]/lib/tiny_mce";
 tinyMCE.init({
     setup : function(ed) {
         ed.onInit.add(function(editor){

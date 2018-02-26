@@ -95,20 +95,20 @@
                                     [% UNLESS ( loggedinusername ) %]
                                         [% IF Koha.Preference('casAuthentication') %]
                                             [%# CAS authentication is too complicated for modal window %]
-                                            <li><a href="/cgi-bin/koha/opac-user.pl">Log in to your account</a></li>
+                                            <li><a class="login-link" href="/cgi-bin/koha/opac-user.pl">Log in to your account</a></li>
                                         [% ELSIF ( Koha.Preference('GoogleOpenIDConnect') == 1 ) %]
 																						<li><span><a href="/cgi-bin/koha/svc/auth/googleopenidconnect?reauthenticate=select_account" class="btn btn-danger" id="oauth" style="margin-bottom: 2em;">PBC Student Sign in</a><a href="/cgi-bin/koha/opac-user.pl" class="btn btn-warning" id="externalaccounts" style="color: #fff; margin-bottom: 2em;">Non-Student sign in</a></span></li>
                                         [% ELSE %]
-                                            <li><a href="/cgi-bin/koha/opac-user.pl" class="loginModal-trigger" role="button" data-toggle="modal">Log in to your account</a></li>
+                                            <li><a href="/cgi-bin/koha/opac-user.pl" class="login-link loginModal-trigger" role="button" data-toggle="modal">Log in to your account</a></li>
                                         [% END %]
                                     [% END %]
                                     [% IF ( loggedinusername ) %]
-                                        <li><p class="members navbar-text">Welcome, <a href="/cgi-bin/koha/opac-user.pl"><span class="loggedinusername">[% USER_INFO.title %] [% USER_INFO.firstname %] [% USER_INFO.surname %]</span></a></p></li>
+                                        <li><p class="members navbar-text">Welcome, <a class="login-link" href="/cgi-bin/koha/opac-user.pl"><span class="loggedinusername">[% USER_INFO.title %] [% USER_INFO.firstname %] [% USER_INFO.surname %]</span></a></p></li>
                                         <li class="divider-vertical"></li>
                                     [% END %]
                                 [% END %]
                                 [% IF EnableOpacSearchHistory %]
-                                    <li><p class="navbar-text"><a href="/cgi-bin/koha/opac-search-history.pl" title="View your search history">Search history</a> [<a class="logout clearsh" href="/cgi-bin/koha/opac-search-history.pl?action=delete" title="Delete your search history">x</a>]</p></li>
+                                    <li><p class="navbar-text"><a class="login-link" href="/cgi-bin/koha/opac-search-history.pl" title="View your search history">Search history</a> [<a class="logout clearsh" href="/cgi-bin/koha/opac-search-history.pl?action=delete" title="Delete your search history">x</a>]</p></li>
                                     <li class="divider-vertical"></li>
                                 [% END %]
                                 [% IF Koha.Preference( 'opacuserlogin' ) == 1 %]
@@ -229,22 +229,22 @@
                                     <div class="input-append">
                                         <select name="branch_group_limit" id="select_library">
                                             <option value="">All libraries</option>
-                                            [% IF BranchCategoriesLoop %]<optgroup label="Libraries">[% END %]
-                                                [% FOREACH BranchesLoo IN Branches.all( selected => opac_name ) %]
-                                                    [% IF BranchesLoo.selected %]
-                                                        <option selected="selected" value="branch:[% BranchesLoo.branchcode %]">[% BranchesLoo.branchname %]</option>
-                                                    [% ELSE %]
-                                                        <option value="branch:[% BranchesLoo.branchcode %]">[% BranchesLoo.branchname %]</option>
-                                                    [% END %]
-                                                [% END %]
-                                            [% IF BranchCategoriesLoop %]
+
+                                            [% IF LibrarySearchGroups %]<optgroup label="Libraries">[% END %]
+
+                                            [% FOREACH BranchesLoo IN BranchesLoop %]
+                                                [% IF ( BranchesLoo.selected ) %]<option selected="selected" value="branch:[% BranchesLoo.value %]">[% BranchesLoo.branchname %]</option>
+                                                [% ELSE %]<option value="branch:[% BranchesLoo.value %]">[% BranchesLoo.branchname %]</option>[% END %]
+                                            [% END %]
+
+                                            [% IF LibrarySearchGroups %]
                                                 </optgroup>
                                                 <optgroup label="Groups">
-                                                    [% FOREACH bc IN BranchCategoriesLoop %]
-                                                        [% IF bc.categorycode == opac_name %]
-                                                            <option selected="selected" value="multibranchlimit-[% bc.categorycode %]">[% bc.categoryname %]</option>
+                                                    [% FOREACH lsg IN LibrarySearchGroups %]
+                                                        [% IF lsg.id == opac_name %]
+                                                            <option selected="selected" value="multibranchlimit-[% lsg.id %]">[% lsg.title %]</option>
                                                         [% ELSE %]
-                                                            <option value="multibranchlimit-[% bc.categorycode %]">[% bc.categoryname %]</option>
+                                                            <option value="multibranchlimit-[% lsg.id %]">[% lsg.title %]</option>
                                                         [% END # / bc.selected %]
                                                     [% END %]
                                                 </optgroup>
@@ -307,34 +307,38 @@
         </div>
         <form action="/cgi-bin/koha/opac-user.pl" method="post" name="auth" id="modalAuth">
             <div class="modal-body">
-                    [% IF ( shibbolethAuthentication ) %]
+                [% IF ( shibbolethAuthentication ) %]
                     [% IF ( invalidShibLogin ) %]
-                    <!-- This is what is displayed if shibboleth login has failed to match a koha user -->
-                    <div class="alert alert-info">
-                        <p>Sorry, your Shibboleth identity does not match a valid library identity. If you have a local login, you may use that below.</p>
-                    </div>
-                    [% ELSE %]
-                    <h4>Shibboleth Login</h4>
-                    <p>If you have a Shibboleth account, please <a href="[% shibbolethLoginUrl %]">click here to login</a>.</p>
-                    <h4>Local Login</h4>
-                    [% END %]
-            [% END %]
-                    <input type="hidden" name="koha_login_context" value="opac" />
-                    <fieldset class="brief">
-                        <label for="muserid">Login:</label><input type="text" id="muserid" name="userid" />
-                        <label for="mpassword">Password:</label><input type="password" id="mpassword" name="password" />
-                    [% IF Koha.Preference('OpacPasswordChange') && Koha.Preference('OpacResetPassword') %]
-                        <div id="forgotpassword-modal">
-                            <a href="/cgi-bin/koha/opac-password-recovery.pl">Forgot your password?</a>
+                        <!-- This is what is displayed if shibboleth login has failed to match a koha user -->
+                        <div class="alert alert-info">
+                            <p>Sorry, your Shibboleth identity does not match a valid library identity. If you have a local login, you may use that below.</p>
                         </div>
+                    [% ELSE %]
+                        <h4>Shibboleth login</h4>
+                        <p>If you have a Shibboleth account, please <a href="[% shibbolethLoginUrl %]">click here to login</a>.</p>
+                        <h4>Local Login</h4>
                     [% END %]
+                [% END %]
+                <input type="hidden" name="koha_login_context" value="opac" />
+                <fieldset class="brief">
+                    <label for="muserid">Login:</label><input type="text" id="muserid" name="userid" />
+                    <label for="mpassword">Password:</label><input type="password" id="mpassword" name="password" />
                     [% IF Koha.Preference( 'NoLoginInstructions' ) %]
-                        <div id="nologininstructions-modal">
+                        <div id="nologininstructions-modal" class="nologininstructions">
                             [% Koha.Preference( 'NoLoginInstructions' ) %]
                         </div>
                     [% END %]
-                        [% IF PatronSelfRegistration && PatronSelfRegistrationDefaultCategory %]<div id="mpatronregistration"><p>Don't have an account? <a href="/cgi-bin/koha/opac-memberentry.pl">Register here.</a></p></div>[% END %]
-                    </fieldset>
+                    [% IF Koha.Preference('OpacPasswordChange') && Koha.Preference('OpacResetPassword') %]
+                        <div id="forgotpassword-modal" class="forgotpassword">
+                            <p><a href="/cgi-bin/koha/opac-password-recovery.pl">Forgot your password?</a></p>
+                        </div>
+                    [% END %]
+                    [% IF PatronSelfRegistration && PatronSelfRegistrationDefaultCategory %]
+                        <div id="patronregistration-modal" class="patronregistration">
+                            <p>Don't have an account? <a href="/cgi-bin/koha/opac-memberentry.pl">Register here.</a></p>
+                        </div>
+                    [% END %]
+                </fieldset>
             </div>
             <div class="modal-footer">
                 <input type="submit" class="btn btn-primary" value="Log in" />

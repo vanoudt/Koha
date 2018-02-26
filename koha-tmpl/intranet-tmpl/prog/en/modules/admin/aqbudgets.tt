@@ -4,8 +4,8 @@
 [% SET footerjs = 1 %]
 [% INCLUDE 'doc-head-open.inc' %]
 <title>Koha &rsaquo; Administration &rsaquo; Funds[% IF op == 'add_form' %] &rsaquo; [% IF ( budget_id ) %]Modify fund[% IF ( budget_name ) %] '[% budget_name %]'[% END %][% ELSE %]Add fund [% END %][% END %]</title>
-<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables.css" />
-<link href="[% interface %]/lib/jquery/plugins/treetable/stylesheets/jquery.treetable.css" rel="stylesheet" type="text/css" />
+<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables_[% KOHA_VERSION %].css" />
+<link href="[% interface %]/lib/jquery/plugins/treetable/stylesheets/jquery.treetable_[% KOHA_VERSION %].css" rel="stylesheet" type="text/css" />
 [% INCLUDE 'doc-head-close.inc' %]
 </head>
 
@@ -248,17 +248,17 @@
 
     <li>
         <span class="label">Owner: </span>
-        [% IF ( budget_owner_name ) %]
+        [% IF  budget_owner %]
             <span  id="budget_owner_name">
-                <a href="/cgi-bin/koha/members/moremember.pl?borrowernumber=[% budget_owner_id %]">
-                    [% budget_owner_name %]
+                <a href="/cgi-bin/koha/members/moremember.pl?borrowernumber=[% budget_owner.borrowernumber %]">
+                    [% budget_owner.firstname %] [% budget_owner.surname %]
                 </a> |
             </span>
         [% END %]
         <a id="edit_owner" class="new_window" href="#"><i class="fa fa-search"></i> Select owner</a>
         <a id="remove_owner" href="#"><i class="fa fa-trash"></i> Remove owner</a>
         <input type="hidden" name="budget_owner_id" id="budget_owner_id"
-            value="[% budget_owner_id %]" />
+            value="[% budget_owner.borrowernumber %]" />
     </li>
 
 
@@ -440,14 +440,14 @@
 </div>
 </div>
 [% MACRO jsinclude BLOCK %]
-    <script type="text/javascript" src="[% interface %]/[% theme %]/js/acq.js"></script>
+    <script type="text/javascript" src="[% interface %]/[% theme %]/js/acq_[% KOHA_VERSION %].js"></script>
     <script type="text/javascript">
         var MSG_BUDGET_PARENT_ALLOCATION = "- " + _("Fund amount exceeds parent allocation") + "\n";
         var MSG_BUDGET_PERIOD_ALLOCATION = "- " + _("Fund amount exceeds period allocation") + "\n";
         var MSG_PARENT_BENEATH_BUDGET = "- " + _("New budget-parent is beneath budget") + "\n";
     </script>
 
-    <script type="text/javascript" src="[% interface %]/[% theme %]/js/acq.js"></script>
+    <script type="text/javascript" src="[% interface %]/[% theme %]/js/acq_[% KOHA_VERSION %].js"></script>
     [% IF op == 'add_form' %]
         <script type="text/javascript">
         //<![CDATA[
@@ -487,11 +487,11 @@
 
             function add_user(borrowernumber, borrowername) {
                 var ids = $("#budget_users_id").val().split(':');
-                if(borrowernumber && ids.indexOf(borrowernumber) == -1) {
+                if(borrowernumber && ids.indexOf(borrowernumber.toString()) == -1) {
                     var li = '<li id="user_' + borrowernumber + '">'
                         + '<a href="/cgi-bin/koha/members/moremember.pl?borrowernumber='
                         + borrowernumber + '">' + borrowername + '</a> '
-                        + ' &bull; <a data-borrowernumber=" + borrowernumber +" class="del_user" href="#"><i class="fa fa-trash"></i> Remove</a> '
+                        + ' &bull; <a data-borrowernumber=" + borrowernumber +" class="del_user" href="#"><i class="fa fa-trash"></i> '+_("Remove")+'</a> '
                         + '</li>';
                     $("#budget_users").prepend(li);
                     ids.push(borrowernumber);
@@ -606,7 +606,7 @@
         </script>
     [% ELSIF op == 'list' %]
         [% INCLUDE 'datatables.inc' %]
-        <script type="text/javascript" src="[% interface %]/lib/jquery/plugins/treetable/jquery.treetable.js"></script>
+        <script type="text/javascript" src="[% interface %]/lib/jquery/plugins/treetable/jquery.treetable_[% KOHA_VERSION %].js"></script>
 
         <script type="text/javascript">
         //<![CDATA[

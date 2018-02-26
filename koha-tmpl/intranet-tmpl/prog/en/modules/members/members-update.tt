@@ -2,15 +2,12 @@
 [% USE Branches %]
 [% USE Categories %]
 [% USE KohaDates %]
+[% SET footerjs = 1 %]
 [% INCLUDE 'doc-head-open.inc' %]
 <title>Koha &rsaquo; Patrons &rsaquo; Update patron records</title>
 [% INCLUDE 'doc-head-close.inc' %]
-<script type="text/javascript">
-    $(function() {
-        $( "#pending_updates" ).accordion();
-    });
-</script>
 </head>
+
 <body id="pat_update" class="pat">
 [% INCLUDE 'header.inc' %]
 [% INCLUDE 'patron-search.inc' %]
@@ -90,10 +87,9 @@
 
 <div id="breadcrumbs"><a href="/cgi-bin/koha/mainpage.pl">Home</a> &rsaquo; <a href="/cgi-bin/koha/members/members-home.pl">Patrons</a> &rsaquo; Update patron records</div>
 
-<div id="doc2" class="yui-t7">
-
-   <div id="bd">
-        <div id="yui-main">
+<div class="main container-fluid">
+    <div class="row">
+        <div class="col-md-8 col-md-offset-2">
 
             [% IF PendingModifications %]
             <h2>Update patron records</h2>
@@ -188,4 +184,14 @@
 
         </div>
     </div>
+
+[% MACRO jsinclude BLOCK %]
+    <script type="text/javascript" src="[% interface %]/[% theme %]/js/members-menu_[% KOHA_VERSION %].js"></script>
+    <script type="text/javascript">
+        $(function() {
+            $( "#pending_updates" ).accordion();
+        });
+    </script>
+[% END %]
+
 [% INCLUDE 'intranet-bottom.inc' %]

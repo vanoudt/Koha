@@ -179,25 +179,11 @@ if ($borrowernumber_hold && !$action) {
         $diffbranch = 1;
     }
 
-    my $is_debarred = $patron->is_debarred;
     $template->param(
-                borrowernumber      => $patron->borrowernumber,
-                borrowersurname     => $patron->surname,
-                borrowerfirstname   => $patron->firstname,
-                borrowerstreetaddress   => $patron->address,
-                borrowercity        => $patron->city,
-                borrowerphone       => $patron->phone,
-                borrowermobile      => $patron->mobile,
-                borrowerfax         => $patron->fax,
-                borrowerphonepro    => $patron->phonepro,
-                borroweremail       => $patron->email,
-                borroweremailpro    => $patron->emailpro,
-                cardnumber          => $patron->cardnumber,
                 expiry              => $expiry,
                 diffbranch          => $diffbranch,
                 messages            => $messages,
                 warnings            => $warnings,
-                restricted          => $is_debarred,
                 amount_outstanding  => GetMemberAccountRecords($patron->borrowernumber),
     );
 }
@@ -403,9 +389,7 @@ foreach my $biblionumber (@biblionumbers) {
 
                 $item->{backgroundcolor} = 'reserved';
                 $item->{reservedate}     = output_pref({ dt => dt_from_string( $first_hold->reservedate ), dateonly => 1 }); # FIXME Should be formatted in the template
-                $item->{ReservedForBorrowernumber}     = $p->borrowernumber;
-                $item->{ReservedForSurname}     = $p->surname;
-                $item->{ReservedForFirstname}     = $p->firstname;
+                $item->{ReservedFor}     = $p;
                 $item->{ExpectedAtLibrary}     = $first_hold->branchcode;
                 $item->{waitingdate} = $first_hold->waitingdate;
             }
@@ -572,19 +556,12 @@ foreach my $biblionumber (@biblionumbers) {
             }
         }
 
-        #     get borrowers reserve info
-        if ( C4::Context->preference('HidePatronName') ) {
-            $reserve{'hidename'}   = 1;
-            $reserve{'cardnumber'} = $res->borrower()->cardnumber();
-        }
         $reserve{'expirationdate'} = output_pref( { dt => dt_from_string( $res->expirationdate ), dateonly => 1 } )
           unless ( !defined( $res->expirationdate ) || $res->expirationdate eq '0000-00-00' );
         $reserve{'date'}           = output_pref( { dt => dt_from_string( $res->reservedate ), dateonly => 1 } );
         $reserve{'borrowernumber'} = $res->borrowernumber();
         $reserve{'biblionumber'}   = $res->biblionumber();
-        $reserve{'borrowernumber'} = $res->borrowernumber();
-        $reserve{'firstname'}      = $res->borrower()->firstname();
-        $reserve{'surname'}        = $res->borrower()->surname();
+        $reserve{'patron'}         = $res->borrower;
         $reserve{'notes'}          = $res->reservenotes();
         $reserve{'waiting_date'}   = $res->waitingdate();
         $reserve{'ccode'}          = $res->item() ? $res->item()->ccode() : undef;
@@ -622,9 +599,6 @@ foreach my $biblionumber (@biblionumbers) {
                      holdsview => 1,
                      C4::Search::enabled_staff_search_views,
                     );
-    if ( $patron ) {
-        $template->param( borrower_branchcode => $patron->branchcode );
-    }
 
     $biblioloopiter{biblionumber} = $biblionumber;
     $biblioloopiter{title} = $biblio->title;
@@ -652,6 +626,7 @@ if ( C4::Context->preference( 'AllowHoldDateInFuture' ) ) {
 }
 
 $template->param(
+    patron => $patron,
     SuspendHoldsIntranet => C4::Context->preference('SuspendHoldsIntranet'),
     AutoResumeSuspendedHolds => C4::Context->preference('AutoResumeSuspendedHolds'),
 );

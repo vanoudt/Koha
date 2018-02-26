@@ -39,7 +39,7 @@ sub usage {
 
 
 sub force_borrower_messaging_defaults {
-    my ($doit, $truncate, $since, $not_expired) = @_;
+    my ($doit, $since, $not_expired, $no_overwrite) = @_;
 
     $since = '0000-00-00' if (!$since);
     print "Since: $since\n";
@@ -47,16 +47,15 @@ sub force_borrower_messaging_defaults {
     my $dbh = C4::Context->dbh;
     $dbh->{AutoCommit} = 0;
 
-    if ( $doit && $truncate ) {
-        $dbh->do(q|SET FOREIGN_KEY_CHECKS = 0|);
-        $dbh->do(q|TRUNCATE borrower_message_transport_preferences|);
-        $dbh->do(q|TRUNCATE borrower_message_preferences|);
-        $dbh->do(q|SET FOREIGN_KEY_CHECKS = 1|);
-    }
-
-    my $sql = "SELECT borrowernumber, categorycode FROM borrowers WHERE dateenrolled >= ?";
+    my $sql =
+q|SELECT DISTINCT bo.borrowernumber, bo.categorycode FROM borrowers bo
+LEFT JOIN borrower_message_preferences mp USING (borrowernumber)
+WHERE bo.dateenrolled >= ?|;
     if ($not_expired) {
-        $sql .= " AND dateexpiry >= NOW()"
+        $sql .= " AND bo.dateexpiry >= NOW()"
+    }
+    if( $no_overwrite ) {
+        $sql .= " AND mp.borrowernumber IS NULL";
     }
     my $sth = $dbh->prepare($sql);
     $sth->execute($since);
@@ -72,18 +71,18 @@ sub force_borrower_messaging_defaults {
 }
 
 
-my ($doit, $truncate, $since, $help, $not_expired);
+my ( $doit, $since, $help, $not_expired, $no_overwrite );
 my $result = GetOptions(
     'doit'        => \$doit,
-    'truncate'    => \$truncate,
     'since:s'     => \$since,
     'not-expired' => \$not_expired,
+    'no-overwrite'  => \$no_overwrite,
     'help|h'      => \$help,
 );
 
 usage() if $help;
 
-force_borrower_messaging_defaults( $doit, $truncate, $since, $not_expired );
+force_borrower_messaging_defaults( $doit, $since, $not_expired, $no_overwrite );
 
 =head1 NAME
 
@@ -94,7 +93,6 @@ borrowers-force-messaging-defaults.pl
   borrowers-force-messaging-defaults.pl
   borrowers-force-messaging-defaults.pl --help
   borrowers-force-messaging-defaults.pl --doit
-  borrowers-force-messaging-defaults.pl --doit --truncate
   borrowers-force-messaging-defaults.pl --doit --not-expired
 
 =head1 DESCRIPTION
@@ -105,8 +103,9 @@ preferences default values as defined for their borrower category. So you would
 have to modify each borrower one by one if you would like to send them 'Hold
 Filled' notice for example.
 
-This script create transport preferences for all existing borrowers and set
-them to default values defined for the category they belong to.
+This script creates/overwrites messaging preferences for all borrowers and sets
+them to default values defined for the category they belong to (unless you
+use the options -not-expired or -no-overwrite to update a subset).
 
 =over 8
 
@@ -118,14 +117,14 @@ Prints this help
 
 Actually update the borrowers.
 
-=item B<--truncate>
-
-Truncate all borrowers transport preferences before (re-)creating them. It
-affects borrower_message_preferences table.
-
 =item B<--not-expired>
 
 Will only update active borrowers (borrowers who didn't pass their expiration date).
+
+=item B<--no-overwrite>
+
+Will only update patrons without messaging preferences and skip patrons that
+already set their preferences.
 
 =back
 

@@ -33,8 +33,7 @@
 
 =cut
 
-use strict;
-#use warnings; FIXME - Bug 2505
+use Modern::Perl;
 use CGI qw ( -utf8 );
 use HTML::Entities;
 use C4::Context;
@@ -54,7 +53,7 @@ use C4::Members::Attributes qw(GetBorrowerAttributes);
 use Koha::AuthorisedValues;
 use Koha::CsvProfiles;
 use Koha::Patron::Debarments qw(GetDebarments);
-use Koha::Patron::Images;
+use Koha::Patron::Messages;
 use Module::Load;
 if ( C4::Context->preference('NorwegianPatronDBEnable') && C4::Context->preference('NorwegianPatronDBEnable') == 1 ) {
     load Koha::NorwegianPatronDB, qw( NLGetSyncDataFromBorrowernumber );
@@ -100,10 +99,10 @@ if (defined $print and $print eq "page") {
     $flagsrequired =  { circulate => "circulate_remaining_permissions" };
 } elsif (defined $print and $print eq "brief") {
     $template_name = "members/moremember-brief.tt";
-    $flagsrequired = { borrowers => 1 };
+    $flagsrequired = { borrowers => 'edit_borrowers' };
 } else {
     $template_name = "members/moremember.tt";
-    $flagsrequired = { borrowers => 1 };
+    $flagsrequired = { borrowers => 'edit_borrowers' };
 }
 
 my ( $template, $loggedinuser, $cookie ) = get_template_and_user(
@@ -121,11 +120,11 @@ $borrowernumber = HTML::Entities::encode($borrowernumber);
 my $error = $input->param('error');
 $template->param( error => $error ) if ( $error );
 
-my $patron        = Koha::Patrons->find($borrowernumber);
-unless ( $patron ) {
-    $template->param (unknowuser => 1);
-    output_html_with_http_headers $input, $cookie, $template->output;
-    exit;
+my $patron         = Koha::Patrons->find( $borrowernumber );
+my $userenv = C4::Context->userenv;
+if ( $userenv and $userenv->{number} ) { # Allow DB user to create a superlibrarian patron
+    my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+    output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
 }
 
 my $issues        = $patron->checkouts;
@@ -139,7 +138,7 @@ my $category_type = $patron->category->category_type;
 my $data = $patron->unblessed;
 
 $debug and printf STDERR "dates (enrolled,expiry,birthdate) raw: (%s, %s, %s)\n", map {$data->{$_}} qw(dateenrolled dateexpiry dateofbirth);
-foreach (qw(dateenrolled dateexpiry dateofbirth)) {
+foreach (qw(dateenrolled dateexpiry dateofbirth)) { # FIXME This should be removed
     my $userdate = $data->{$_};
     unless ($userdate) {
         $debug and warn sprintf "Empty \$data{%12s}", $_;
@@ -148,7 +147,6 @@ foreach (qw(dateenrolled dateexpiry dateofbirth)) {
     }
     $data->{$_} = dt_from_string( $userdate );
 }
-$data->{'IS_ADULT'} = ( $data->{'categorycode'} ne 'I' );
 
 for (qw(gonenoaddress lost borrowernotes)) {
 	 $data->{$_} and $template->param(flagged => 1) and last;
@@ -156,7 +154,7 @@ for (qw(gonenoaddress lost borrowernotes)) {
 
 if ( $patron->is_debarred ) {
     $template->param(
-        userdebarred => 1,
+        userdebarred => 1, # FIXME Template should use patron->is_debarred
         flagged => 1,
         debarments => scalar GetDebarments({ borrowernumber => $borrowernumber }),
     );
@@ -169,7 +167,7 @@ if ( $patron->is_debarred ) {
 
 $data->{ "sex_".$data->{'sex'}."_p" } = 1 if defined $data->{sex};
 
-if ( $category_type eq 'C') {
+if ( $patron->is_child ) {
     my $patron_categories = Koha::Patron::Categories->search_limited({ category_type => 'A' }, {order_by => ['categorycode']});
     $template->param( 'CATCODE_MULTI' => 1) if $patron_categories->count > 1;
     $template->param( 'catcode' => $patron_categories->next->categorycode )  if $patron_categories->count == 1;
@@ -197,15 +195,12 @@ my $relatives_issues_count =
   Koha::Database->new()->schema()->resultset('Issue')
   ->count( { borrowernumber => \@relatives } );
 
-$template->param( adultborrower => 1 ) if ( $category_type eq 'A' || $category_type eq 'I' );
-
 my %bor;
 $bor{'borrowernumber'} = $borrowernumber;
 
 # Converts the branchcode to the branch name
 my $samebranch;
 if ( C4::Context->preference("IndependentBranches") ) {
-    my $userenv = C4::Context->userenv;
     if ( C4::Context->IsSuperLibrarian() ) {
         $samebranch = 1;
     }
@@ -217,7 +212,7 @@ else {
     $samebranch = 1;
 }
 my $library = Koha::Libraries->find( $data->{branchcode})->unblessed;
-@{$data}{keys %$library} = values %$library; # merge in all branch columns
+@{$data}{keys %$library} = values %$library; # merge in all branch columns # FIXME This is really ugly, we should pass the library instead
 
 my ( $total, $accts, $numaccts) = GetMemberAccountRecords( $borrowernumber );
 
@@ -235,7 +230,7 @@ if ($print eq "page") {
 }
 
 # Show OPAC privacy preference is system preference is set
-if ( C4::Context->preference('OPACPrivacy') ) {
+if ( C4::Context->preference('OPACPrivacy') ) { # FIXME Should be moved the the template
     $template->param( OPACPrivacy => 1);
     $template->param( "privacy".$data->{'privacy'} => 1);
 }
@@ -276,17 +271,13 @@ if ( C4::Context->preference('NorwegianPatronDBEnable') && C4::Context->preferen
     }
 }
 
-# check to see if patron's image exists in the database
-# basically this gives us a template var to condition the display of
-# patronimage related interface on
-$template->param( picture => 1 ) if $patron->image;
 # Generate CSRF token for upload and delete image buttons
 $template->param(
     csrf_token => Koha::Token->new->generate_csrf({ session_id => $input->cookie('CGISESSID'),}),
 );
 
 
-$template->param(%$data);
+$template->param(%$data); # FIXME This should be removed and used $patron instead, but too many things are processed above
 
 if (C4::Context->preference('ExtendedPatronAttributes')) {
     my $attributes = C4::Members::Attributes::GetBorrowerAttributes($borrowernumber);
@@ -324,13 +315,24 @@ if (C4::Context->preference('EnhancedMessagingPreferences')) {
     C4::Form::MessagingPreferences::set_form_values({ borrowernumber => $borrowernumber }, $template);
     $template->param(messaging_form_inactive => 1);
     $template->param(SMSSendDriver => C4::Context->preference("SMSSendDriver"));
-    $template->param(SMSnumber     => $data->{'smsalertnumber'});
     $template->param(TalkingTechItivaPhone => C4::Context->preference("TalkingTechItivaPhoneNotification"));
 }
 
 if ( C4::Context->preference("ExportCircHistory") ) {
     $template->param(csv_profiles => [ Koha::CsvProfiles->search({ type => 'marc' }) ]);
 }
+
+my $patron_messages = Koha::Patron::Messages->search(
+    {
+        'me.borrowernumber' => $borrowernumber,
+    },
+    {
+        join => 'manager',
+        '+select' => ['manager.surname', 'manager.firstname' ],
+        '+as' => ['manager_surname', 'manager_firstname'],
+    }
+);
+
 
 # Display the language description instead of the code
 # Note that this is certainly wrong
@@ -341,9 +343,6 @@ $template->param(
     patron          => $patron,
     translated_language => $translated_language,
     detailview      => 1,
-    borrowernumber  => $borrowernumber,
-    othernames      => $data->{'othernames'},
-    categoryname    => $patron->category->description,
     was_renewed     => scalar $input->param('was_renewed') ? 1 : 0,
     todaysdate      => output_pref({ dt => dt_from_string, dateformat => 'iso', dateonly => 1 }),
     totalprice      => sprintf("%.2f", $totalprice),
@@ -351,15 +350,14 @@ $template->param(
     totaldue_raw    => $total,
     overdues_exist  => $overdues_exist,
     StaffMember     => $category_type eq 'S',
-    is_child        => $category_type eq 'C',
     $category_type  => 1, # [% IF ( I ) %] = institutional/organisation
     samebranch      => $samebranch,
     quickslip       => $quickslip,
     housebound_role => scalar $patron->housebound_role,
-    privacy_guarantor_checkouts => $data->{'privacy_guarantor_checkouts'},
     PatronsPerPage => C4::Context->preference("PatronsPerPage") || 20,
     relatives_issues_count => $relatives_issues_count,
     relatives_borrowernumbers => \@relatives,
+    patron_messages       => $patron_messages,
 );
 
 output_html_with_http_headers $input, $cookie, $template->output;

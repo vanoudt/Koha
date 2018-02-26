@@ -10,7 +10,7 @@
 <title>Koha &rsaquo; Circulation &rsaquo; Holds queue</title>
 [% INCLUDE 'doc-head-close.inc' %]
 <style type="text/css"> p { margin-top: 0; }</style>
-<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables.css" />
+<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables_[% KOHA_VERSION %].css" />
 </head>
 
 <body id="circ_view_holdsqueue" class="circ">
@@ -151,11 +151,11 @@
                 [% END %]
             </td>
             <td class="hq-patron">
-              [% IF Koha.Preference('HidePatronName') %]
-                <p><a href="/cgi-bin/koha/circ/circulation.pl?borrowernumber=[% itemsloo.borrowernumber %]#reserves">[% itemsloo.cardnumber %]</a></p>
-              [% ELSE %]
-                <p><a href="/cgi-bin/koha/circ/circulation.pl?borrowernumber=[% itemsloo.borrowernumber %]#reserves">[% itemsloo.surname %], [% itemsloo.firstname %] ([% itemsloo.cardnumber %])</a></p>
-                <p>[% itemsloo.phone %]</p>
+              <p>
+                  [% INCLUDE 'patron-title.inc' patron=itemsloo.patron hide_patron_infos_if_needed=1 link_to="circulation_reserves" %]
+              </p>
+              [% UNLESS Koha.Preference('HidePatronName') %]
+                 <p>[% itemsloo.patron.phone %]</p>
               [% END %]
             </td>
             <td class="hq-sendto">[% Branches.GetName( itemsloo.pickbranch ) %]</td>
@@ -175,7 +175,7 @@
             <label for="branchlimit">Library: </label>
             <select name="branchlimit" id="branchlimit">
                 <option value="">All</option>
-                [% PROCESS options_for_libraries libraries => Branches.all() %]
+                [% PROCESS options_for_libraries libraries => Branches.all( only_from_group => 1 ) %]
             </select>
         </li>
     </ol></fieldset>
@@ -215,7 +215,7 @@
             $('#holdst thead input').on('change keyup keydown', filterColumn);
 
             var columns_settings = [% ColumnsSettings.GetColumns('circ', 'view_holdsqueue', 'holds-table', 'json') %];
-            var holdst = KohaTable("#holdst", {
+            var holdst = KohaTable("holdst", {
                 "aaSorting": [[ 3, "asc" ]],
                 "aoColumns": [
                     { "sType": "anti-the" },null,null,null,null,null,null,null,null,{ "sType": "title-string" },null

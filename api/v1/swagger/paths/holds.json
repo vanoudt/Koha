@@ -154,7 +154,7 @@
         "allow-owner": true,
         "allow-guarantor": true,
         "permissions": {
-          "borrowers": "1"
+          "borrowers": "edit_borrowers"
         }
       }
     },
@@ -190,6 +190,10 @@
                 "description": "Hold end date",
                 "type": "string",
                 "format": "date"
+              },
+              "itemtype": {
+                "description": "Limit hold on one itemtype (ignored for item-level holds)",
+                "type": "string"
               }
             }
           }

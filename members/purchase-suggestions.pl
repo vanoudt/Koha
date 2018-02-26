@@ -35,28 +35,21 @@ my ( $template, $loggedinuser, $cookie ) = get_template_and_user(
         query           => $input,
         type            => "intranet",
         authnotrequired => 0,
-        flagsrequired   => { borrowers => 1 },
+        flagsrequired   => { borrowers => 'edit_borrowers' },
         debug           => 1,
     }
 );
 
 my $borrowernumber = $input->param('borrowernumber');
 
-my $patron = Koha::Patrons->find( $borrowernumber );
-unless ( $patron ) {
-    print $input->redirect("/cgi-bin/koha/circ/circulation.pl?borrowernumber=$borrowernumber");
-    exit;
-}
+my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+my $patron         = Koha::Patrons->find( $borrowernumber );
+output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
+
 my $category = $patron->category;
-my $data = $patron->unblessed;
-$data->{description} = $category->description;
-$data->{category_type} = $category->category_type;
-foreach my $key ( keys %$data ) {
-    $template->param( $key => $data->{$key} );
-}
 $template->param(
+    patron => $patron,
     suggestionsview  => 1,
-    categoryname => $data->{'description'},
 );
 
 if (C4::Context->preference('ExtendedPatronAttributes')) {
@@ -66,8 +59,6 @@ if (C4::Context->preference('ExtendedPatronAttributes')) {
         extendedattributes => $attributes
     );
 }
-
-$template->param( picture => 1 ) if $patron->image;
 
 my $suggestions = SearchSuggestion( { suggestedby => $borrowernumber } );
 

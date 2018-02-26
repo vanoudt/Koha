@@ -1453,8 +1453,8 @@ sub NewSubscription {
     # then create the 1st expected number
     $query = qq(
         INSERT INTO subscriptionhistory
-            (biblionumber, subscriptionid, histstartdate)
-        VALUES (?,?,?)
+            (biblionumber, subscriptionid, histstartdate, missinglist, recievedlist)
+        VALUES (?,?,?, '', '')
         );
     $sth = $dbh->prepare($query);
     $sth->execute( $biblionumber, $subscriptionid, $startdate);
@@ -1529,6 +1529,9 @@ sub ReNewSubscription {
             }
         );
     }
+
+    $numberlength ||= 0; # Should not we raise an exception instead?
+    $weeklength   ||= 0;
 
     # renew subscription
     $query = qq|

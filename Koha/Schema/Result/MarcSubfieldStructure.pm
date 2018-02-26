@@ -124,7 +124,7 @@ __PACKAGE__->table("marc_subfield_structure");
 
 =head2 defaultvalue
 
-  data_type: 'text'
+  data_type: 'mediumtext'
   is_nullable: 1
 
 =head2 maxlength
@@ -169,7 +169,7 @@ __PACKAGE__->add_columns(
   "link",
   { data_type => "varchar", is_nullable => 1, size => 80 },
   "defaultvalue",
-  { data_type => "text", is_nullable => 1 },
+  { data_type => "mediumtext", is_nullable => 1 },
   "maxlength",
   { data_type => "integer", default_value => 9999, is_nullable => 0 },
 );
@@ -213,8 +213,8 @@ __PACKAGE__->belongs_to(
 );
 
 
-# Created by DBIx::Class::Schema::Loader v0.07045 @ 2016-08-30 11:59:32
-# DO NOT MODIFY THIS OR ANYTHING ABOVE! md5sum:/gnyZuGje+sg82HfxMLI0g
+# Created by DBIx::Class::Schema::Loader v0.07042 @ 2018-02-02 18:57:57
+# DO NOT MODIFY THIS OR ANYTHING ABOVE! md5sum:18iBiNNiwTSYtKk28aoLJg
 
 
 # You can replace this text with custom content, and it will be preserved on regeneration

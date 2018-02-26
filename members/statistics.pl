@@ -40,28 +40,19 @@ my ( $template, $loggedinuser, $cookie ) = get_template_and_user(
         query           => $input,
         type            => "intranet",
         authnotrequired => 0,
-        flagsrequired   => { borrowers => 1 },
+        flagsrequired   => { borrowers => 'edit_borrowers' },
         debug           => 1,
     }
 );
 
 my $borrowernumber = $input->param('borrowernumber');
 
-# Set informations for the patron
-my $patron = Koha::Patrons->find( $borrowernumber );
-unless ( $patron ) {
-    print $input->redirect("/cgi-bin/koha/circ/circulation.pl?borrowernumber=$borrowernumber");
-    exit;
-}
+my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+my $patron         = Koha::Patrons->find( $borrowernumber );
+output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
 
 my $category = $patron->category;
-my $borrower= $patron->unblessed;
-$borrower->{description} = $category->description;
-$borrower->{category_type} = $category->category_type;
 
-$template->param(
-    categoryname    => $borrower->{'description'},
-);
 # Construct column names
 my $fields = C4::Members::Statistics::get_fields();
 our @statistic_column_names = split '\|', $fields;
@@ -93,13 +84,8 @@ if (C4::Context->preference('ExtendedPatronAttributes')) {
     );
 }
 
-$template->param( picture => 1 ) if $patron->image;
-
-$template->param(%$borrower);
-
-$template->param( adultborrower => 1 ) if ( $borrower->{category_type} eq 'A' || $borrower->{category_type} eq 'I' );
-
 $template->param(
+    patron             => $patron,
     statisticsview     => 1,
     datas              => $datas,
     column_names       => \@statistic_column_names,

@@ -51,8 +51,7 @@ The id of the supplier whose baskets we will display
 
 =cut
 
-use strict;
-use warnings;
+use Modern::Perl;
 use C4::Auth;
 use C4::Biblio;
 use C4::Budgets;
@@ -139,8 +138,7 @@ for my $vendor (@suppliers) {
                 $basket->{$_} ||= 0;
             }
             if ( $patron ) {
-                $basket->{authorisedby_firstname} = $patron->firstname;
-                $basket->{authorisedby_surname} = $patron->surname;
+                $basket->{authorisedby} = $patron;
             }
             if ($basket->{basketgroupid}) {
                 my $basketgroup = C4::Acquisition::GetBasketgroup($basket->{basketgroupid});

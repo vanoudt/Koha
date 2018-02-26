@@ -21,8 +21,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
-use strict;
-#use warnings; FIXME - Bug 2505
+use Modern::Perl;
 
 use CGI qw ( -utf8 );
 use C4::Context;
@@ -39,12 +38,12 @@ if ( C4::Context->preference('NorwegianPatronDBEnable') && C4::Context->preferen
 
 my $input = new CGI;
 
-my ($template, $borrowernumber, $cookie)
+my ($template, $loggedinuser, $cookie)
                 = get_template_and_user({template_name => "members/deletemem.tt",
                                         query => $input,
                                         type => "intranet",
                                         authnotrequired => 0,
-                                        flagsrequired => {borrowers => 1},
+                                        flagsrequired => {borrowers => 'edit_borrowers'},
                                         debug => 1,
                                         });
 
@@ -52,10 +51,14 @@ my ($template, $borrowernumber, $cookie)
 my $member       = $input->param('member');
 
 #Do not delete yourself...
-if ($borrowernumber == $member ) {
+if ( $loggedinuser == $member ) {
     print $input->redirect("/cgi-bin/koha/members/moremember.pl?borrowernumber=$member&error=CANT_DELETE_YOURSELF");
     exit 0; # Exit without error
 }
+
+my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+my $patron         = Koha::Patrons->find( $member );
+output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
 
 # Handle deletion from the Norwegian national patron database, if it is enabled
 # If the "deletelocal" parameter is set to "false", the regular deletion will be
@@ -74,11 +77,6 @@ if ( C4::Context->preference('NorwegianPatronDBEnable') && C4::Context->preferen
 my $issues = GetPendingIssues($member);     # FIXME: wasteful call when really, we only want the count
 my $countissues = scalar(@$issues);
 
-my $patron = Koha::Patrons->find( $member );
-unless ( $patron ) {
-    print $input->redirect("/cgi-bin/koha/circ/circulation.pl?borrowernumber=$member");
-    exit;
-}
 my $flags = C4::Members::patronflags( $patron->unblessed );
 my $userenv = C4::Context->userenv;
 
@@ -90,7 +88,7 @@ if ($patron->category->category_type eq "S") {
         exit 0; # Exit without error
     }
 } else {
-    unless(C4::Auth::haspermission($userenv->{'id'},{'borrowers'=>1})) {
+    unless(C4::Auth::haspermission($userenv->{'id'},{'borrowers'=>'edit_borrowers'})) {
 	print $input->redirect("/cgi-bin/koha/members/moremember.pl?borrowernumber=$member&error=CANT_DELETE");
         exit 0; # Exit without error
     }
@@ -110,28 +108,9 @@ my $op = $input->param('op') || 'delete_confirm';
 my $dbh = C4::Context->dbh;
 my $is_guarantor = $dbh->selectrow_array("SELECT COUNT(*) FROM borrowers WHERE guarantorid=?", undef, $member);
 if ( $op eq 'delete_confirm' or $countissues > 0 or $flags->{'CHARGES'}  or $is_guarantor or $deletelocal == 0) {
-    $template->param( picture => 1 ) if $patron->image;
-
-    $template->param( adultborrower => 1 ) if $patron->category->category_type =~ /^(A|I)$/;
 
     $template->param(
-        # FIXME The patron object should be passed to the template
-        borrowernumber => $patron->borrowernumber,
-        surname => $patron->surname,
-        title => $patron->title,
-        cardnumber => $patron->cardnumber,
-        firstname => $patron->firstname,
-        categorycode => $patron->categorycode,
-        category_type => $patron->category->category_type,
-        categoryname  => $patron->category->description,
-        address => $patron->address,
-        address2 => $patron->address2,
-        city => $patron->city,
-        zipcode => $patron->zipcode,
-        country => $patron->country,
-        phone => $patron->phone,
-        email => $patron->email,
-        branchcode => $patron->branchcode,
+        patron => $patron,
     );
     if ($countissues >0) {
         $template->param(ItemsOnIssues => $countissues);

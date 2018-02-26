@@ -20,8 +20,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
-use strict;
-use warnings;
+use Modern::Perl;
 use CGI qw ( -utf8 );
 use C4::Circulation;
 use C4::Output;
@@ -206,19 +205,12 @@ foreach my $code ( keys %$messages ) {
             $err{tbr}      = $tbr;
             $err{code}     = $typecode;
         }
-        elsif ( $code eq 'IsPermanent' ) {
-            $err{errispermanent} = 1;
-            $err{msg} = $messages->{'IsPermanent'};
-        }
         elsif ( $code eq 'WasReturned' ) {
             $err{errwasreturned} = 1;
             $err{borrowernumber} = $messages->{'WasReturned'};
             my $patron = Koha::Patrons->find( $messages->{'WasReturned'} );
             if ( $patron ) { # Just in case...
-                $err{title}      = $patron->title;
-                $err{firstname}  = $patron->firstname;
-                $err{surname}    = $patron->surname;
-                $err{cardnumber} = $patron->cardnumber;
+                $err{patron} = $patron;
             }
         }
         $err{errdesteqholding} = ( $code eq 'DestinationEqualsHolding' );

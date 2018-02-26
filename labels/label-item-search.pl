@@ -17,8 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
-use strict;
-use warnings;
+use Modern::Perl;
 use vars qw($debug $cgi_debug);
 
 use CGI qw ( -utf8 );
@@ -161,7 +160,7 @@ if ($show_results) {
             query           => $query,
             type            => "intranet",
             authnotrequired => 0,
-            flagsrequired   => { borrowers => 1 },
+            flagsrequired   => { borrowers => 'edit_borrowers' },
             flagsrequired   => { catalogue => 1 },
             debug           => 1,
         }

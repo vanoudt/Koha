@@ -26,8 +26,7 @@ this script is the main page for acqui
 
 =cut
 
-use strict;
-use warnings;
+use Modern::Perl;
 
 use CGI qw ( -utf8 );
 use C4::Auth;
@@ -73,10 +72,7 @@ foreach my $budget ( @{$budget_arr} ) {
 
     my $patron = Koha::Patrons->find( $budget->{budget_owner_id} );
     if ( $patron ) {
-        # FIXME should pass the entire object into budget_owner
-        $budget->{budget_owner_firstname} = $patron->firstname;
-        $budget->{budget_owner_surname} = $patron->surname;
-        $budget->{budget_owner_borrowernumber} = $patron->borrowernumber;
+        $budget->{budget_owner} = $patron;
     }
 
     if ( !defined $budget->{budget_amount} ) {

@@ -52,6 +52,8 @@ use C4::CourseReserves qw(GetItemCourseReservesInfo);
 use Koha::Biblios;
 use Koha::RecordProcessor;
 use Koha::AuthorisedValues;
+use Koha::IssuingRules;
+use Koha::Items;
 use Koha::ItemTypes;
 use Koha::Acquisition::Orders;
 use Koha::Virtualshelves;
@@ -460,9 +462,9 @@ if ($session->param('busc')) {
 }
 }
 
-
-$template->param( 'ItemsIssued' => CountItemsIssued( $biblionumber ) );
-$template->param('OPACShowCheckoutName' => C4::Context->preference("OPACShowCheckoutName") );
+$template->param(
+    OPACShowCheckoutName => C4::Context->preference("OPACShowCheckoutName"),
+);
 
 # adding items linked via host biblios
 
@@ -652,15 +654,16 @@ if ( C4::Context->preference('OPACAcquisitionDetails' ) ) {
     };
 }
 
+my $allow_onshelf_holds;
 if ( not $viewallitems and @items > $max_items_to_display ) {
     $template->param(
         too_many_items => 1,
         items_count => scalar( @items ),
     );
 } else {
-  my $allow_onshelf_holds;
   my $patron = Koha::Patrons->find( $borrowernumber );
   for my $itm (@items) {
+    my $item = Koha::Items->find( $itm->{itemnumber} );
     $itm->{holds_count} = $item_reserves{ $itm->{itemnumber} };
     $itm->{priority} = $priority{ $itm->{itemnumber} };
     $norequests = 0
@@ -671,7 +674,7 @@ if ( not $viewallitems and @items > $max_items_to_display ) {
         && !$itemtypes->{$itm->{'itype'}}->{notforloan}
         && $itm->{'itemnumber'};
 
-    $allow_onshelf_holds = C4::Reserves::OnShelfHoldsAllowed( $itm, ( $patron ? $patron->unblessed : {} ) )
+    $allow_onshelf_holds = Koha::IssuingRules->get_onshelfholds_policy( { item => $item, patron => $patron } )
       unless $allow_onshelf_holds;
 
     # get collection code description, too
@@ -717,7 +720,10 @@ if ( not $viewallitems and @items > $max_items_to_display ) {
         push @itemloop, $itm;
     }
   }
-  $template->param( 'AllowOnShelfHolds' => $allow_onshelf_holds );
+}
+
+if( $allow_onshelf_holds || CountItemsIssued($biblionumber) || $biblio->has_items_waiting_or_intransit ) {
+    $template->param( ReservableItems => 1 );
 }
 
 # Display only one tab if one items list is empty
@@ -842,7 +848,7 @@ if ( C4::Context->preference('reviewson') ) {
         }
     }
     for my $review (@$reviews) {
-        my $patron = Koha::Patrons->find( $review->{borrowernumber} );
+        my $patron = Koha::Patrons->find( $review->{borrowernumber} ); # FIXME Should be Koha::Review->reviewer or similar
 
         # setting some borrower info into this hash
         if ( $patron ) {

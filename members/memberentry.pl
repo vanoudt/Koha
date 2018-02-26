@@ -19,8 +19,7 @@
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
 # pragma
-use strict;
-use warnings;
+use Modern::Perl;
 
 # external modules
 use CGI qw ( -utf8 );
@@ -72,9 +71,12 @@ my ($template, $loggedinuser, $cookie)
            query => $input,
            type => "intranet",
            authnotrequired => 0,
-           flagsrequired => {borrowers => 1},
+           flagsrequired => {borrowers => 'edit_borrowers'},
            debug => ($debug) ? 1 : 0,
        });
+
+my $borrowernumber = $input->param('borrowernumber');
+my $patron         = Koha::Patrons->find($borrowernumber);
 
 if ( C4::Context->preference('SMSSendDriver') eq 'Email' ) {
     my @providers = Koha::SMS::Providers->search();
@@ -82,7 +84,6 @@ if ( C4::Context->preference('SMSSendDriver') eq 'Email' ) {
 }
 
 my $guarantorid    = $input->param('guarantorid');
-my $borrowernumber = $input->param('borrowernumber');
 my $actionType     = $input->param('actionType') || '';
 my $modify         = $input->param('modify');
 my $delete         = $input->param('delete');
@@ -104,7 +105,6 @@ my @errors;
 my $borrower_data;
 my $NoUpdateLogin;
 my $userenv = C4::Context->userenv;
-
 
 ## Deal with debarments
 $template->param(
@@ -152,10 +152,9 @@ $template->param( "quickadd" => 1 ) if ( $quickadd );
 $template->param( "duplicate" => 1 ) if ( $op eq 'duplicate' );
 $template->param( "checked" => 1 ) if ( defined($nodouble) && $nodouble eq 1 );
 if ( $op eq 'modify' or $op eq 'save' or $op eq 'duplicate' ) {
-    my $patron = Koha::Patrons->find( $borrowernumber );
-    unless ( $patron ) {
-        print $input->redirect("/cgi-bin/koha/circ/circulation.pl?borrowernumber=$borrowernumber");
-        exit;
+    if ( $patron and $userenv and $userenv->{number} ) { # Allow DB user to create a superlibrarian patron
+        my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+        output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
     }
 
     $borrower_data = $patron->unblessed;
@@ -241,7 +240,7 @@ if ( ( $op eq 'insert' ) and !$nodouble ) {
         $conditions->{dateofbirth} = $newdata{dateofbirth} if $newdata{dateofbirth};
     }
     $nodouble = 1;
-    my $patrons = Koha::Patrons->search($conditions);
+    my $patrons = Koha::Patrons->search($conditions); # FIXME Should be search_limited?
     if ( $patrons->count > 0) {
         $nodouble = 0;
         $check_member = $patrons->next->borrowernumber;
@@ -316,7 +315,6 @@ if ($op eq 'save' || $op eq 'insert'){
 
     my $dateofbirth;
     if ($op eq 'save' && $step == 3) {
-        my $patron = Koha::Patrons->find( $borrowernumber );
         $dateofbirth = $patron->dateofbirth;
     }
     else {
@@ -759,10 +757,14 @@ $template->param(
   check_member    => $check_member,#to know if the borrower already exist(=>1) or not (=>0) 
   "op$op"   => 1);
 
+$guarantorid = $borrower_data->{'guarantorid'} || $guarantorid;
+my $guarantor = $guarantorid ? Koha::Patrons->find( $guarantorid ) : undef;
 $template->param(
+  patron => $patron, # Used by address include templates now
   nodouble  => $nodouble,
   borrowernumber  => $borrowernumber, #register number
-  guarantorid => ($borrower_data->{'guarantorid'} || $guarantorid),
+  guarantor   => $guarantor,
+  guarantorid => $guarantorid,
   relshiploop => \@relshipdata,
   btitle=> $default_borrowertitle,
   guarantorinfo   => $guarantorinfo,

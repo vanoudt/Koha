@@ -63,6 +63,8 @@ my ( $template, $loggedinuser, $cookie ) = get_template_and_user(
     }
 );
 
+our $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+
 my $dbh = C4::Context->dbh;
 
 my $req;
@@ -296,28 +298,14 @@ if ($noreport) {
         }
 
         push @overduedata, {
+            patron                 => scalar Koha::Patrons->find( $data->{borrowernumber} ),
             duedate                => $data->{date_due},
-            borrowernumber         => $data->{borrowernumber},
             barcode                => $data->{barcode},
-            cardnumber             => $data->{cardnumber},
             itemnum                => $data->{itemnumber},
             issuedate              => output_pref({ dt => dt_from_string( $data->{issuedate} ), dateonly => 1 }),
-            borrowertitle          => $data->{borrowertitle},
-            surname                => $data->{surname},
-            firstname              => $data->{firstname},
-            streetnumber           => $data->{streetnumber},                   
-            streettype             => $data->{streettype},                     
-            address                => $data->{address},                        
-            address2               => $data->{address2},                       
-            city                   => $data->{city},                   
-            zipcode                => $data->{zipcode},                        
-            country                => $data->{country},
-            phone                  => $data->{phone},
-            email                  => $data->{email},
             biblionumber           => $data->{biblionumber},
             title                  => $data->{title},
             author                 => $data->{author},
-            branchcode             => $data->{branchcode},
             homebranchcode         => $data->{homebranchcode},
             holdingbranchcode      => $data->{holdingbranchcode},
             itemcallnumber         => $data->{itemcallnumber},
@@ -369,14 +357,19 @@ sub build_csv {
     my @lines = ();
 
     # build header ...
-    my @keys = qw /duedate title author borrowertitle firstname surname phone barcode email address address2 zipcode city country
-                branchcode itemcallnumber biblionumber borrowernumber itemnum issuedate replacementprice streetnumber streettype/;
+    my @keys =
+      qw ( duedate title author borrowertitle firstname surname phone barcode email address address2 zipcode city country
+      branchcode itemcallnumber biblionumber borrowernumber itemnum issuedate replacementprice streetnumber streettype);
     my $csv = Text::CSV_XS->new();
     $csv->combine(@keys);
     push @lines, $csv->string();
 
+    my @private_keys = qw( dueborrowertitle firstname surname phone email address address2 zipcode city country streetnumber streettype );
     # ... and rest of report
     foreach my $overdue ( @{ $overdues } ) {
+        unless ( $logged_in_user->can_see_patron_infos( $overdue->{patron} ) ) {
+            $overdue->{$_} = undef for @private_keys;
+        }
         push @lines, $csv->string() if $csv->combine(map { $overdue->{$_} } @keys);
     }
 

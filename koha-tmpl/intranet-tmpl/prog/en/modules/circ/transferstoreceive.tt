@@ -5,7 +5,7 @@
 [% INCLUDE 'doc-head-open.inc' %]
 <title>Koha &rsaquo; Circulation &rsaquo; Transfers to receive</title>
 [% INCLUDE 'doc-head-close.inc' %]
-<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables.css" />
+<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables_[% KOHA_VERSION %].css" />
 </head>
 
 <body id="circ_transferstoreceive" class="circ">
@@ -50,16 +50,16 @@
                             [% IF ( reser.itemtype ) %] (<b>[% reser.itemtype %]</b>)[% END %]
                             <br />Barcode: [% reser.barcode %]
                     </td>
-                    <td>[% IF ( reser.borrowername ) %]
-                        <a href="/cgi-bin/koha/members/moremember.pl?borrowernumber=[% reser.borrowernum %]">
-                            [% reser.borrowername %][%IF ( reser.borrowerfirstname ) %], [% reser.borrowerfirstname %][% END %]
+                    <td>[% IF ( reser.patron ) %]
+                        <a href="/cgi-bin/koha/members/moremember.pl?borrowernumber=[% reser.patron.borrowernumber %]">
+                            [% reser.patron.surname %][%IF ( reser.patron.firstname ) %], [% reser.patron.firstname %][% END %]
                         </a>
-                        [% IF ( reser.borrowerphone ) %]<br />[% reser.borrowerphone %][% END %]
-                            [% IF ( reser.borrowermail ) %]
+                        [% IF ( reser.patron.phone ) %]<br />[% reser.patron.phone %][% END %]
+                            [% IF ( reser.patron.first_valid_email_address ) %]
                                 <br />
                                 [% BLOCK subject %]Hold:[% END %]
-                                <a href="mailto:[% reser.borrowermail %]?subject=[% INCLUDE subject %] [% reser.title |html %]">
-                                    [% reser.borrowermail %]
+                                <a href="mailto:[% reser.patron.first_valid_email_address %]?subject=[% INCLUDE subject %] [% reser.title |html %]">
+                                    [% reser.patron.first_valid_email_address %]
                                 </a>
                             [% END %]
                         [% ELSE %]

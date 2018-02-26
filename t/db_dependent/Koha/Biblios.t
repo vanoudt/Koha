@@ -19,11 +19,11 @@
 
 use Modern::Perl;
 
-use Test::More tests => 2;
+use Test::More tests => 4;
 
 use C4::Reserves;
 
-use Koha::DateUtils qw( dt_from_string );
+use Koha::DateUtils qw( dt_from_string output_pref );
 use Koha::Biblios;
 use Koha::Patrons;
 use Koha::Subscriptions;
@@ -44,6 +44,17 @@ my $biblioitem = $schema->resultset('Biblioitem')->new(
         biblionumber => $biblio->id
     }
 )->insert();
+
+subtest 'store' => sub {
+    plan tests => 1;
+    is(
+        Koha::Biblios->find( $biblio->biblionumber )->datecreated,
+        output_pref(
+            { dt => dt_from_string, dateformat => 'iso', dateonly => 1 }
+        ),
+        "datecreated must be set to today if not passed to the constructor"
+    );
+};
 
 subtest 'holds + current_holds' => sub {
     plan tests => 5;
@@ -78,6 +89,46 @@ subtest 'subscriptions' => sub {
         'Koha::Biblio->subscriptions should return a Koha::Subscriptions object'
     );
     is( $subscriptions->count, 2, 'Koha::Biblio->subscriptions should return the correct number of subscriptions');
+};
+
+subtest 'waiting_or_in_transit' => sub {
+    plan tests => 4;
+    my $biblio = $builder->build( { source => 'Biblio' } );
+    my $item = $builder->build({
+        source => 'Item',
+        value => {
+            biblionumber => $biblio->{biblionumber}
+        }
+    });
+    my $reserve = $builder->build({
+        source => 'Reserve',
+        value => {
+            biblionumber => $biblio->{biblionumber},
+            found => undef
+        }
+    });
+
+    $reserve = Koha::Holds->find($reserve->{reserve_id});
+    $biblio = Koha::Biblios->find($biblio->{biblionumber});
+
+    is($biblio->has_items_waiting_or_intransit, 0, 'Item is neither waiting nor in transit');
+
+    $reserve->found('W')->store;
+    is($biblio->has_items_waiting_or_intransit, 1, 'Item is waiting');
+
+    $reserve->found('T')->store;
+    is($biblio->has_items_waiting_or_intransit, 1, 'Item is in transit');
+
+    my $transfer = $builder->build({
+        source => 'Branchtransfer',
+        value => {
+            itemnumber => $item->{itemnumber},
+            datearrived => undef
+        }
+    });
+    my $t = Koha::Database->new()->schema()->resultset( 'Branchtransfer' )->find($transfer->{branchtransfer_id});
+    $reserve->found(undef)->store;
+    is($biblio->has_items_waiting_or_intransit, 1, 'Item has transfer');
 };
 
 $schema->storage->txn_rollback;

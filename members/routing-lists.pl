@@ -17,8 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
-use strict;
-#use warnings; FIXME - Bug 2505
+use Modern::Perl;
 use CGI qw ( -utf8 );
 use C4::Output;
 use C4::Auth qw/:DEFAULT/;
@@ -48,17 +47,9 @@ my $borrowernumber = $query->param('borrowernumber');
 
 my $branch = C4::Context->userenv->{'branch'};
 
-my $patron;
-$patron = Koha::Patrons->find( $borrowernumber ) if $borrowernumber;
-unless ( $patron ) {
-    print $query->redirect("/cgi-bin/koha/circ/circulation.pl?borrowernumber=$borrowernumber");
-    exit;
-}
-
-my $category = $patron->category;
-my $patron_info = $patron->unblessed;
-$patron_info->{description} = $category->description;
-$patron_info->{category_type} = $category->category_type;
+my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+my $patron         = Koha::Patrons->find( $borrowernumber );
+output_and_exit_if_error( $query, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
 
 my $count;
 my @borrowerSubscriptions;
@@ -79,18 +70,10 @@ $template->param(
     routinglistview => 1
 );
 
-$template->param( adultborrower => 1 ) if ( $patron_info->{category_type} =~ /^(A|I)$/ );
-
-##################################################################################
-
-$template->param(%$patron_info);
-
 $template->param(
+    patron            => $patron,
     findborrower      => $findborrower,
-    borrower          => $patron_info,
-    borrowernumber    => $borrowernumber,
-    branch            => $branch,
-    categoryname      => $patron_info->{description},
+    branch            => $branch, # FIXME This is confusing
 );
 
 if (C4::Context->preference('ExtendedPatronAttributes')) {
@@ -100,7 +83,5 @@ if (C4::Context->preference('ExtendedPatronAttributes')) {
         extendedattributes => $attributes
     );
 }
-
-$template->param( picture => 1 ) if $patron and $patron->image;
 
 output_html_with_http_headers $query, $cookie, $template->output;

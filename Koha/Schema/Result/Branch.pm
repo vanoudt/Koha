@@ -32,22 +32,22 @@ __PACKAGE__->table("branches");
 
 =head2 branchname
 
-  data_type: 'mediumtext'
+  data_type: 'longtext'
   is_nullable: 0
 
 =head2 branchaddress1
 
-  data_type: 'mediumtext'
+  data_type: 'longtext'
   is_nullable: 1
 
 =head2 branchaddress2
 
-  data_type: 'mediumtext'
+  data_type: 'longtext'
   is_nullable: 1
 
 =head2 branchaddress3
 
-  data_type: 'mediumtext'
+  data_type: 'longtext'
   is_nullable: 1
 
 =head2 branchzip
@@ -58,47 +58,47 @@ __PACKAGE__->table("branches");
 
 =head2 branchcity
 
-  data_type: 'mediumtext'
+  data_type: 'longtext'
   is_nullable: 1
 
 =head2 branchstate
 
-  data_type: 'mediumtext'
+  data_type: 'longtext'
   is_nullable: 1
 
 =head2 branchcountry
 
-  data_type: 'text'
+  data_type: 'mediumtext'
   is_nullable: 1
 
 =head2 branchphone
 
-  data_type: 'mediumtext'
+  data_type: 'longtext'
   is_nullable: 1
 
 =head2 branchfax
 
-  data_type: 'mediumtext'
+  data_type: 'longtext'
   is_nullable: 1
 
 =head2 branchemail
 
-  data_type: 'mediumtext'
+  data_type: 'longtext'
   is_nullable: 1
 
 =head2 branchreplyto
 
-  data_type: 'mediumtext'
+  data_type: 'longtext'
   is_nullable: 1
 
 =head2 branchreturnpath
 
-  data_type: 'mediumtext'
+  data_type: 'longtext'
   is_nullable: 1
 
 =head2 branchurl
 
-  data_type: 'mediumtext'
+  data_type: 'longtext'
   is_nullable: 1
 
 =head2 issuing
@@ -120,12 +120,12 @@ __PACKAGE__->table("branches");
 
 =head2 branchnotes
 
-  data_type: 'mediumtext'
+  data_type: 'longtext'
   is_nullable: 1
 
 =head2 opac_info
 
-  data_type: 'text'
+  data_type: 'mediumtext'
   is_nullable: 1
 
 =head2 geolocation
@@ -146,33 +146,33 @@ __PACKAGE__->add_columns(
   "branchcode",
   { data_type => "varchar", default_value => "", is_nullable => 0, size => 10 },
   "branchname",
-  { data_type => "mediumtext", is_nullable => 0 },
+  { data_type => "longtext", is_nullable => 0 },
   "branchaddress1",
-  { data_type => "mediumtext", is_nullable => 1 },
+  { data_type => "longtext", is_nullable => 1 },
   "branchaddress2",
-  { data_type => "mediumtext", is_nullable => 1 },
+  { data_type => "longtext", is_nullable => 1 },
   "branchaddress3",
-  { data_type => "mediumtext", is_nullable => 1 },
+  { data_type => "longtext", is_nullable => 1 },
   "branchzip",
   { data_type => "varchar", is_nullable => 1, size => 25 },
   "branchcity",
-  { data_type => "mediumtext", is_nullable => 1 },
+  { data_type => "longtext", is_nullable => 1 },
   "branchstate",
-  { data_type => "mediumtext", is_nullable => 1 },
+  { data_type => "longtext", is_nullable => 1 },
   "branchcountry",
-  { data_type => "text", is_nullable => 1 },
+  { data_type => "mediumtext", is_nullable => 1 },
   "branchphone",
-  { data_type => "mediumtext", is_nullable => 1 },
+  { data_type => "longtext", is_nullable => 1 },
   "branchfax",
-  { data_type => "mediumtext", is_nullable => 1 },
+  { data_type => "longtext", is_nullable => 1 },
   "branchemail",
-  { data_type => "mediumtext", is_nullable => 1 },
+  { data_type => "longtext", is_nullable => 1 },
   "branchreplyto",
-  { data_type => "mediumtext", is_nullable => 1 },
+  { data_type => "longtext", is_nullable => 1 },
   "branchreturnpath",
-  { data_type => "mediumtext", is_nullable => 1 },
+  { data_type => "longtext", is_nullable => 1 },
   "branchurl",
-  { data_type => "mediumtext", is_nullable => 1 },
+  { data_type => "longtext", is_nullable => 1 },
   "issuing",
   { data_type => "tinyint", is_nullable => 1 },
   "branchip",
@@ -180,9 +180,9 @@ __PACKAGE__->add_columns(
   "branchprinter",
   { data_type => "varchar", is_nullable => 1, size => 100 },
   "branchnotes",
-  { data_type => "mediumtext", is_nullable => 1 },
+  { data_type => "longtext", is_nullable => 1 },
   "opac_info",
-  { data_type => "text", is_nullable => 1 },
+  { data_type => "mediumtext", is_nullable => 1 },
   "geolocation",
   { data_type => "varchar", is_nullable => 1, size => 255 },
   "marcorgcode",
@@ -304,21 +304,6 @@ Related object: L<Koha::Schema::Result::BranchItemRule>
 __PACKAGE__->has_many(
   "branch_item_rules",
   "Koha::Schema::Result::BranchItemRule",
-  { "foreign.branchcode" => "self.branchcode" },
-  { cascade_copy => 0, cascade_delete => 0 },
-);
-
-=head2 branchrelations
-
-Type: has_many
-
-Related object: L<Koha::Schema::Result::Branchrelation>
-
-=cut
-
-__PACKAGE__->has_many(
-  "branchrelations",
-  "Koha::Schema::Result::Branchrelation",
   { "foreign.branchcode" => "self.branchcode" },
   { cascade_copy => 0, cascade_delete => 0 },
 );
@@ -548,6 +533,21 @@ __PACKAGE__->has_many(
   { cascade_copy => 0, cascade_delete => 0 },
 );
 
+=head2 library_groups
+
+Type: has_many
+
+Related object: L<Koha::Schema::Result::LibraryGroup>
+
+=cut
+
+__PACKAGE__->has_many(
+  "library_groups",
+  "Koha::Schema::Result::LibraryGroup",
+  { "foreign.branchcode" => "self.branchcode" },
+  { cascade_copy => 0, cascade_delete => 0 },
+);
+
 =head2 opac_news
 
 Type: has_many
@@ -608,19 +608,9 @@ __PACKAGE__->has_many(
   { cascade_copy => 0, cascade_delete => 0 },
 );
 
-=head2 categorycodes
 
-Type: many_to_many
-
-Composing rels: L</branchrelations> -> categorycode
-
-=cut
-
-__PACKAGE__->many_to_many("categorycodes", "branchrelations", "categorycode");
-
-
-# Created by DBIx::Class::Schema::Loader v0.07042 @ 2017-11-09 11:42:45
-# DO NOT MODIFY THIS OR ANYTHING ABOVE! md5sum:LmN2FlbKiZTRX+egCHuDjQ
+# Created by DBIx::Class::Schema::Loader v0.07042 @ 2018-02-16 17:54:53
+# DO NOT MODIFY THIS OR ANYTHING ABOVE! md5sum:QOMUFz2EjvAVWCkIpNmvtg
 
 
 # You can replace this text with custom code or comments, and it will be preserved on regeneration

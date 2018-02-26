@@ -33,8 +33,8 @@ use C4::Search::History;
 use Koha;
 use Koha::Caches;
 use Koha::AuthUtils qw(get_script_name hash_password);
+use Koha::Library::Groups;
 use Koha::Libraries;
-use Koha::LibraryCategories;
 use Koha::Patrons;
 use POSIX qw/strftime/;
 use List::MoreUtils qw/ any /;
@@ -214,26 +214,26 @@ sub get_template_and_user {
         # It's possible for $user to be the borrowernumber if they don't have a
         # userid defined (and are logging in through some other method, such
         # as SSL certs against an email address)
-        my $borrower;
+        my $patron;
         $borrowernumber = getborrowernumber($user) if defined($user);
         if ( !defined($borrowernumber) && defined($user) ) {
-            $borrower = Koha::Patrons->find( $user );
-            if ($borrower) {
-                $borrower = $borrower->unblessed;
+            $patron = Koha::Patrons->find( $user );
+            if ($patron) {
                 $borrowernumber = $user;
 
                 # A bit of a hack, but I don't know there's a nicer way
                 # to do it.
-                $user = $borrower->{firstname} . ' ' . $borrower->{surname};
+                $user = $patron->firstname . ' ' . $patron->surname;
             }
         } else {
-            $borrower = Koha::Patrons->find( $borrowernumber );
-            $borrower->unblessed if $borrower; # FIXME Otherwise, what to do?
+            $patron = Koha::Patrons->find( $borrowernumber );
+            # FIXME What to do if $patron does not exist?
         }
 
         # user info
-        $template->param( loggedinusername   => $user );
-        $template->param( loggedinusernumber => $borrowernumber );
+        $template->param( loggedinusername   => $user ); # FIXME Should be replaced with something like patron-title.inc
+        $template->param( loggedinusernumber => $borrowernumber ); # FIXME Should be replaced with logged_in_user.borrowernumber
+        $template->param( logged_in_user     => $patron );
         $template->param( sessionID          => $sessionID );
 
         if ( $in->{'type'} eq 'opac' ) {
@@ -255,7 +255,7 @@ sub get_template_and_user {
             );
         }
 
-        $template->param( "USER_INFO" => $borrower );
+        $template->param( "USER_INFO" => $patron->unblessed ) if $borrowernumber != 0;
 
         my $all_perms = get_all_subpermissions();
 
@@ -473,6 +473,7 @@ sub get_template_and_user {
             UseKohaPlugins                                                             => C4::Context->preference('UseKohaPlugins'),
             UseCourseReserves                                                          => C4::Context->preference("UseCourseReserves"),
             useDischarge                                                               => C4::Context->preference('useDischarge'),
+            KOHA_VERSION                                                               => C4::Context->preference('Version'),
         );
     }
     else {
@@ -513,11 +514,11 @@ sub get_template_and_user {
             $opac_name = C4::Context->userenv->{'branch'};
         }
 
-        my $library_categories = Koha::LibraryCategories->search({categorytype => 'searchdomain', show_in_pulldown => 1}, { order_by => ['categorytype', 'categorycode']});
+        my @search_groups = Koha::Library::Groups->get_search_groups({ interface => 'opac' });
         $template->param(
             OpacAdditionalStylesheet                   => C4::Context->preference("OpacAdditionalStylesheet"),
             AnonSuggestions                       => "" . C4::Context->preference("AnonSuggestions"),
-            BranchCategoriesLoop                  => $library_categories,
+            LibrarySearchGroups                   => \@search_groups,
             opac_name                             => $opac_name,
             LibraryName                           => "" . C4::Context->preference("LibraryName"),
             LibraryNameTitle                      => "" . $LibraryNameTitle,
@@ -546,6 +547,7 @@ sub get_template_and_user {
             OpacTopissue                          => C4::Context->preference("OpacTopissue"),
             RequestOnOpac                         => C4::Context->preference("RequestOnOpac"),
             'Version'                             => C4::Context->preference('Version'),
+            KOHA_VERSION                          => C4::Context->preference('Version'),
             hidelostitems                         => C4::Context->preference("hidelostitems"),
             mylibraryfirst                        => ( C4::Context->preference("SearchMyLibraryFirst") && C4::Context->userenv ) ? C4::Context->userenv->{'branch'} : '',
             opaclayoutstylesheet                  => "" . C4::Context->preference("opaclayoutstylesheet"),
@@ -1264,6 +1266,7 @@ sub checkauth {
         PatronSelfRegistrationDefaultCategory => C4::Context->preference("PatronSelfRegistrationDefaultCategory"),
         opac_css_override                     => $ENV{'OPAC_CSS_OVERRIDE'},
         too_many_login_attempts               => ( $patron and $patron->account_locked ),
+        KOHA_VERSION                          => C4::Context->preference('Version'),
     );
 
     $template->param( SCO_login => 1 ) if ( $query->param('sco_user_login') );

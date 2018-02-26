@@ -1,55 +1,16 @@
+[% SET footerjs = 1 %]
 [% INCLUDE 'doc-head-open.inc' %]
-<title>Koha &rsaquo; Choose Adult category</title>
+<title>Koha &rsaquo; Choose adult category</title>
 [% INCLUDE 'doc-head-close.inc' %]
-<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables.css" />
-[% INCLUDE 'datatables.inc' %]
-<script type="text/javascript">
-	$(document).ready(function() {
-        $("#catst").dataTable($.extend(true, {}, dataTablesDefaults, {
-            "sDom": 't',
-            "aaSorting": [[ 2, "asc" ]],
-            "aoColumnDefs": [
-                { "aTargets": [ 0 ], "bSortable": false, "bSearchable": false }
-            ],
-            "bPaginate": false
-        }));
-	});
-</script>
-<style type="text/css"> 
-	   #custom-doc { width:29em;*width:28.3em;min-width:377px; margin:auto; text-align:left; } 
-</style> 
+<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables_[% KOHA_VERSION %].css" />
 </head>
+
 <body id="pat_update-child" class="pat">
-
-<div id="custom-doc" class="yui-t7">
-<div id="bd">
-
-[% IF ( CONFIRM ) %]
-<script type="text/javascript">
-function confirm_updatechild() {
-    var is_confirmed = window.confirm('Are you sure you want to update this child to an Adult category?  This cannot be undone.');
-   
-    if (is_confirmed) {
-            window.location='/cgi-bin/koha/members/update-child.pl?op=update&borrowernumber=[% borrowernumber %]&catcode=[% catcode %]&catcode_multi=[% CATCODE_MULTI %]';
-    }
-}
-
-confirm_updatechild([% borrowernumber %]);
-</script>
-[% END %]
-
-[% IF ( SUCCESS ) %]
-<script type="text/javascript">
-self.opener.location.href='/cgi-bin/koha/members/moremember.pl?borrowernumber=[% borrowernumber %]';
-window.close();
-</script>
-[% END %]
-
-
+    <div class="container-fluid">
 
 [% IF ( MULTI ) %]
 
-    <h3> Choose Adult category </h3>
+    <h3> Choose adult category </h3>
 
     [% IF patron_categories %]
         <form method="post" action="update-child.pl">
@@ -89,8 +50,50 @@ window.close();
 [% END %]
 
 
+[% MACRO jsinclude BLOCK %]
+    [% INCLUDE 'datatables.inc' %]
+    <script type="text/javascript">
 
+        /* Set some variables needed in members-menu.js */
+        var advsearch = "[% advsearch %]";
+        var dateformat = "[% dateformat %]";
+        var CAN_user_borrowers = "[% CAN_user_borrowers %]";
+        var CAN_user_borrowers_edit_borrowers = "[% CAN_user_borrowers_edit_borrowers %]";
+        var NorwegianPatronDBEnable = "[% NorwegianPatronDBEnable %]";
+        var CATCODE_MULTI = "[% CATCODE_MULTI %]";
+        var catcode = "[% catcode %]";
+        var destination = "[% destination %]";
 
+        $(document).ready(function() {
+            $("#catst").dataTable($.extend(true, {}, dataTablesDefaults, {
+                "sDom": 't',
+                "aaSorting": [[ 2, "asc" ]],
+                "aoColumnDefs": [
+                    { "aTargets": [ 0 ], "bSortable": false, "bSearchable": false }
+                ],
+                "bPaginate": false
+            }));
+        });
+    </script>
+    [% IF ( CONFIRM ) %]
+        <script type="text/javascript">
+            function confirm_updatechild() {
+                var is_confirmed = window.confirm('Are you sure you want to update this child to an Adult category?  This cannot be undone.');
+                if (is_confirmed) {
+                        window.location='/cgi-bin/koha/members/update-child.pl?op=update&borrowernumber=[% borrowernumber %]&catcode=[% catcode %]&catcode_multi=[% CATCODE_MULTI %]';
+                }
+            }
 
-</div>
-[% INCLUDE 'popup-bottom.inc' %]
+            confirm_updatechild([% borrowernumber %]);
+        </script>
+    [% END %]
+    [% IF ( SUCCESS ) %]
+        <script type="text/javascript">
+            self.opener.location.href='/cgi-bin/koha/members/moremember.pl?borrowernumber=[% borrowernumber %]';
+            window.close();
+        </script>
+    [% END %]
+    <script type="text/javascript" src="[% interface %]/[% theme %]/js/members-menu_[% KOHA_VERSION %].js"></script>
+[% END %]
+
+[% INCLUDE 'intranet-bottom.inc' popup_window=1 %]

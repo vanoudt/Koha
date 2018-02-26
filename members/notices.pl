@@ -19,8 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
-use strict;
-#use warnings; FIXME - Bug 2505
+use Modern::Perl;
 use C4::Auth;
 use C4::Output;
 use CGI qw ( -utf8 );
@@ -45,12 +44,12 @@ my ($template, $loggedinuser, $cookie)
 				query => $input,
 				type => "intranet",
 				authnotrequired => 0,
-				flagsrequired => {borrowers => 1},
+                flagsrequired => {borrowers => 'edit_borrowers'},
 				debug => 1,
 				});
 
-$template->param( $borrower );
-$template->param( picture => 1 ) if $patron->image;
+my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
 
 # Allow resending of messages in Notices tab
 my $op = $input->param('op') || q{};
@@ -75,13 +74,11 @@ if (C4::Context->preference('ExtendedPatronAttributes')) {
     );
 }
 
-$template->param(%$borrower);
-$template->param( adultborrower => 1 ) if ( $borrower->{category_type} eq 'A' || $borrower->{category_type} eq 'I' );
 $template->param(
+    patron             => $patron,
     QUEUED_MESSAGES    => $queued_messages,
     borrowernumber     => $borrowernumber,
     sentnotices        => 1,
-    categoryname       => $patron->category->description,
 );
 output_html_with_http_headers $input, $cookie, $template->output;
 

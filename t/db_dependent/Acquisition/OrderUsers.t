@@ -34,8 +34,8 @@ my $basketno = NewBasket( $bookseller->id, 1 );
 
 my $budgetid = C4::Budgets::AddBudget(
     {
-        budget_code => "budget_code_test_getordersbybib",
-        budget_name => "budget_name_test_getordersbybib",
+        budget_code => "budget_code_test",
+        budget_name => "budget_name_test",
     }
 );
 my $budget = C4::Budgets::GetBudget($budgetid);
@@ -49,7 +49,7 @@ my $order = Koha::Acquisition::Order->new(
         quantity         => 2,
         biblionumber     => $biblionumber,
         budget_id        => $budgetid,
-        entrydate        => '01-01-2014',
+        entrydate        => '2014-01-01',
         currency         => $currency->{currency},
         orderstatus      => 1,
         quantityreceived => 0,

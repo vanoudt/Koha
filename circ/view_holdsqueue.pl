@@ -22,8 +22,7 @@ This script displays items in the tmp_holdsqueue table
 
 =cut
 
-use strict;
-use warnings;
+use Modern::Perl;
 use CGI qw ( -utf8 );
 use C4::Auth;
 use C4::Output;
@@ -54,6 +53,9 @@ my $itemtypeslimit = $params->{'itemtypeslimit'};
 if ( $run_report ) {
     # XXX GetHoldsQueueItems() does not support $itemtypeslimit!
     my $items = GetHoldsQueueItems($branchlimit, $itemtypeslimit);
+    for my $item ( @$items ) {
+        $item->{patron} = Koha::Patrons->find( $item->{borrowernumber} );
+    }
     $template->param(
         branchlimit     => $branchlimit,
         total      => scalar @$items,

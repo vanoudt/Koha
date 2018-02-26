@@ -19,8 +19,7 @@
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
 
-use strict;
-#use warnings; FIXME - Bug 2505
+use Modern::Perl;
 use C4::Koha;
 use CGI qw ( -utf8 );
 use HTML::Entities;
@@ -60,8 +59,6 @@ if($query->cookie("holdfor")){
         holdfor_cardnumber => $holdfor_patron->cardnumber,
     );
 }
-
-my $hidepatronname = C4::Context->preference("HidePatronName");
 
 # get variables
 
@@ -187,14 +184,10 @@ foreach my $item (@items){
         $item->{'issue'}= 0;
     }
 
-    unless ($hidepatronname) {
-        if ( $item->{'borrowernumber'} ) {
-            my $curr_borrower = Koha::Patrons->find( $item->{borrowernumber} );
-            $item->{borrowerfirstname} = $curr_borrower->firstname;
-            $item->{borrowersurname} = $curr_borrower->surname;
-        }
+    if ( $item->{'borrowernumber'} ) {
+        my $curr_borrower = Koha::Patrons->find( $item->{borrowernumber} );
+        $item->{patron} = $curr_borrower;
     }
-
 }
 
 my $mss = Koha::MarcSubfieldStructures->search({ frameworkcode => $fw, kohafield => 'items.itemlost', authorised_value => { not => undef } });
@@ -225,7 +218,6 @@ $template->param(
     itemnumber          => $itemnumber,
     z3950_search_params => C4::Search::z3950_search_args(GetBiblioData($biblionumber)),
     subtitle            => $subtitle,
-    hidepatronname      => $hidepatronname,
 );
 $template->param(ONLY_ONE => 1) if ( $itemnumber && $showncount != @items );
 $template->{'VARS'}->{'searchid'} = $query->param('searchid');

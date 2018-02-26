@@ -240,8 +240,8 @@ sub construct_objects_needed {
 
     $query = '
     INSERT INTO biblio
-      (title, author)
-    VALUES (?,?)';
+      (title, author, datecreated)
+    VALUES (?,?, NOW())';
     $insert_sth = $dbh->prepare($query);
     $insert_sth->execute( $title1, $author1 );
     my $biblionumber1 = $dbh->last_insert_id( undef, undef, 'biblio', undef );
@@ -283,19 +283,19 @@ sub construct_objects_needed {
     # ---------- Add 2 auth_header
     $query = '
     INSERT INTO auth_header
-      (authtypecode)
-    VALUES (?)';
+      (authtypecode, marcxml)
+    VALUES (?, "")';
     $insert_sth = $dbh->prepare($query);
-    $insert_sth->execute('authtypecode1');
+    $insert_sth->execute('atc1');
     my $authid1 = $dbh->last_insert_id( undef, undef, 'auth_header', undef );
-    $insert_sth->execute('authtypecode2');
+    $insert_sth->execute('atc2');
     my $authid2 = $dbh->last_insert_id( undef, undef, 'auth_header', undef );
 
     # ---------- Add 1 old_issues
     $query = '
     INSERT INTO old_issues
-      (borrowernumber, branchcode, itemnumber)
-    VALUES (?,?,?)';
+      (issue_id, borrowernumber, branchcode, itemnumber)
+    VALUES ((select coalesce(max(issue_id), 0)+1 from issues),?,?,?)';
     $insert_sth = $dbh->prepare($query);
     $insert_sth->execute( $borrowernumber1, $branchcode, $item_number1 );
     my $issue_id1 = $dbh->last_insert_id( undef, undef, 'old_issues', undef );

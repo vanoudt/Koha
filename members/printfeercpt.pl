@@ -22,8 +22,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
-use strict;
-use warnings;
+use Modern::Perl;
 
 use C4::Auth;
 use C4::Output;
@@ -42,7 +41,7 @@ my ($template, $loggedinuser, $cookie)
                             query => $input,
                             type => "intranet",
                             authnotrequired => 0,
-                            flagsrequired => {borrowers => 1, updatecharges => 'remaining_permissions'},
+                            flagsrequired => {borrowers => 'edit_borrowers', updatecharges => 'remaining_permissions'},
                             debug => 1,
                             });
 
@@ -50,21 +49,15 @@ my $borrowernumber=$input->param('borrowernumber');
 my $action = $input->param('action') || '';
 my $accountlines_id = $input->param('accountlines_id');
 
-my $patron = Koha::Patrons->find( $borrowernumber );
-unless ( $patron ) {
-    print $input->redirect("/cgi-bin/koha/circ/circulation.pl?borrowernumber=$borrowernumber");
-    exit;
-}
-my $category = $patron->category;
-my $data = $patron->unblessed;
-$data->{description} = $category->description;
-$data->{category_type} = $category->category_type;
+my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+my $patron         = Koha::Patrons->find( $borrowernumber );
+output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
 
 if ( $action eq 'print' ) {
 #  ReversePayment( $borrowernumber, $input->param('accountno') );
 }
 
-if ( $data->{'category_type'} eq 'C') {
+if ( $patron->is_child ) {
     my $patron_categories = Koha::Patron::Categories->search_limited({ category_type => 'A' }, {order_by => ['categorycode']});
     $template->param( 'CATCODE_MULTI' => 1) if $patron_categories->count > 1;
     $template->param( 'catcode' => $patron_categories->next->categorycde )  if $patron_categories->count == 1;
@@ -119,31 +112,11 @@ for (my $i=0;$i<$numaccts;$i++){
     push(@accountrows, \%row);
 }
 
-$template->param( adultborrower => 1 ) if ( $data->{'category_type'} eq 'A' || $data->{'category_type'} eq 'I' );
-
-$template->param( picture => 1 ) if $patron->image;
-
 $template->param(
+    patron               => $patron,
     finesview           => 1,
-    firstname           => $data->{'firstname'},
-    surname             => $data->{'surname'},
-    borrowernumber      => $borrowernumber,
-    cardnumber          => $data->{'cardnumber'},
-    categorycode        => $data->{'categorycode'},
-    category_type       => $data->{'category_type'},
- #   category_description => $data->{'description'},
-    categoryname		 => $data->{'description'},
-    address             => $data->{'address'},
-    address2            => $data->{'address2'},
-    city                => $data->{'city'},
-    zipcode             => $data->{'zipcode'},
-    country             => $data->{'country'},
-    phone               => $data->{'phone'},
-    email               => $data->{'email'},
-    branchcode          => $data->{'branchcode'},
     total               => sprintf("%.2f",$total),
     totalcredit         => $totalcredit,
-	is_child        => ($data->{'category_type'} eq 'C'),
     accounts            => \@accountrows );
 
 output_html_with_http_headers $input, $cookie, $template->output;

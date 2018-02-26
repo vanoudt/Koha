@@ -22,8 +22,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
-use strict;
-use warnings;
+use Modern::Perl;
 
 use C4::Auth;
 use C4::Output;
@@ -38,7 +37,7 @@ use Koha::Patrons;
 use Koha::Patron::Categories;
 
 my $input=new CGI;
-my $flagsrequired = { borrowers => 1, updatecharges => 1 };
+my $flagsrequired = { borrowers => 'edit_borrowers', updatecharges => 1 };
 
 my $borrowernumber=$input->param('borrowernumber');
 
@@ -51,6 +50,8 @@ my $add=$input->param('add');
 
 if ($add){
     if ( checkauth( $input, 0, $flagsrequired, 'intranet' ) ) {
+        # Note: If the logged in user is not allowed to see this patron an invoice can be forced
+        # Here we are trusting librarians not to hack the system
         my $barcode = $input->param('barcode');
         my $itemnum;
         if ($barcode) {
@@ -71,20 +72,18 @@ if ($add){
             query           => $input,
             type            => "intranet",
             authnotrequired => 0,
-            flagsrequired   => { borrowers     => 1,
+            flagsrequired   => { borrowers     => 'edit_borrowers',
                                  updatecharges => 'remaining_permissions' },
             debug           => 1,
         }
     );
-					  
-    if ( $patron->category->category_type eq 'C') {
+    my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+    output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
+    if ( $patron->is_child ) {
         my $patron_categories = Koha::Patron::Categories->search_limited({ category_type => 'A' }, {order_by => ['categorycode']});
         $template->param( 'CATCODE_MULTI' => 1) if $patron_categories->count > 1;
         $template->param( 'catcode' => $patron_categories->next->categorycode )  if $patron_categories->count == 1;
     }
-
-    $template->param( adultborrower => 1 ) if ( $patron->category->category_type =~ /^(A|I)$/ );
-    $template->param( picture => 1 ) if $patron->image;
 
     if (C4::Context->preference('ExtendedPatronAttributes')) {
         my $attributes = GetBorrowerAttributes($borrowernumber);
@@ -94,13 +93,10 @@ if ($add){
         );
     }
 
-    $template->param(%{ $patron->unblessed});
+    $template->param( patron => $patron );
 
     $template->param(
         finesview      => 1,
-        borrowernumber => $borrowernumber,
-        categoryname   => $patron->category->description,
-        is_child       => ($patron->category->category_type eq 'C'), # FIXME is_child should be a Koha::Patron method
         );
     output_html_with_http_headers $input, $cookie, $template->output;
 }

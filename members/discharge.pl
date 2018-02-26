@@ -48,7 +48,7 @@ my ( $template, $loggedinuser, $cookie, $flags ) = get_template_and_user({
     query           => $input,
     type            => 'intranet',
     authnotrequired => 0,
-    flagsrequired   => { 'borrowers' => '*' },
+    flagsrequired   => { 'borrowers' => 'edit_borrowers' },
 });
 
 my $borrowernumber = $input->param('borrowernumber');
@@ -58,20 +58,13 @@ unless ( C4::Context->preference('useDischarge') ) {
    exit;
 }
 
-$borrowernumber = $input->param('borrowernumber');
-
+my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
 my $patron = Koha::Patrons->find( $borrowernumber );
-unless ( $patron ) {
-    print $input->redirect("/cgi-bin/koha/circ/circulation.pl?borrowernumber=$borrowernumber");
-    exit;
-}
+output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
 
 my $can_be_discharged = Koha::Patron::Discharge::can_be_discharged({
     borrowernumber => $borrowernumber
 });
-
-my $holds = $patron->holds;
-my $has_reserves = $holds->count;
 
 # Generating discharge if needed
 if ( $input->param('discharge') and $can_be_discharged ) {
@@ -106,37 +99,14 @@ if ( $input->param('discharge') and $can_be_discharged ) {
 }
 
 # Already generated discharges
-my $validated_discharges = Koha::Patron::Discharge::get_validated({
+my @validated_discharges = Koha::Patron::Discharge::get_validated({
     borrowernumber => $borrowernumber,
 });
 
-$template->param( picture => 1 ) if $patron->image;
-
 $template->param(
-    # FIXME The patron object should be passed to the template
-    borrowernumber    => $borrowernumber,
-    title             => $patron->title,
-    initials          => $patron->initials,
-    surname           => $patron->surname,
-    borrowernumber    => $borrowernumber,
-    firstname         => $patron->firstname,
-    cardnumber        => $patron->cardnumber,
-    categorycode      => $patron->categorycode,
-    category_type     => $patron->category->category_type,
-    categoryname      => $patron->category->description,
-    address           => $patron->address,
-    streetnumber      => $patron->streetnumber,
-    streettype        => $patron->streettype,
-    address2          => $patron->address2,
-    city              => $patron->city,
-    zipcode           => $patron->zipcode,
-    country           => $patron->country,
-    phone             => $patron->phone,
-    email             => $patron->email,
-    branchcode        => $patron->branchcode,
-    has_reserves      => $has_reserves,
+    patron => $patron,
     can_be_discharged => $can_be_discharged,
-    validated_discharges => $validated_discharges,
+    validated_discharges => \@validated_discharges,
 );
 
 $template->param( dischargeview => 1, );

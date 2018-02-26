@@ -17,8 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
-use strict;
-use warnings;
+use Modern::Perl;
 
 use CGI qw ( -utf8 );
 use Date::Manip;
@@ -88,6 +87,8 @@ $sep = "\t" if ($sep eq 'tabulation');
 $template->param(do_it => $do_it,
 );
 
+our $itemtypes = Koha::ItemTypes->search_with_localization->unblessed;
+
 our @patron_categories = Koha::Patron::Categories->search_limited({}, {order_by => ['description']});
 
 our $locations = { map { ( $_->{authorised_value} => $_->{lib} ) } Koha::AuthorisedValues->get_descriptions_by_koha_field( { frameworkcode => '', kohafield => 'items.location' }, { order_by => ['description'] } ) };
@@ -150,9 +151,6 @@ my $dbh = C4::Context->dbh;
 my @values;
 my %labels;
 my %select;
-
-# create itemtype arrayref for <select>.
-our $itemtypes = Koha::ItemTypes->search_with_localization;
 
     # location list
 my @locations;
@@ -355,12 +353,13 @@ sub calculate {
         $sth->execute;
     }
 
+    my $itemtypes_map = { map { $_->{itemtype} => $_ } @{ $itemtypes } };
     while ( my ($celvalue) = $sth->fetchrow ) {
         my %cell = ( rowtitle => $celvalue, totalrow => 0 );    # we leave 'rowtitle' as hash key (used when filling the table), and add coltitle_display
         $cell{rowtitle_display} =
             ( $line =~ /ccode/ )    ? $ccodes->{$celvalue}
           : ( $line =~ /location/ ) ? $locations->{$celvalue}
-          : ( $line =~ /itemtype/ ) ? $itemtypes->{$celvalue}->{description}
+          : ( $line =~ /itemtype/ ) ? $itemtypes_map->{$celvalue}->{translated_description}
           :                           $celvalue;                               # default fallback
         if ( $line =~ /sort1/ ) {
             foreach (@$Bsort1) {
@@ -449,7 +448,7 @@ sub calculate {
         $cell{coltitle_display} =
             ( $column =~ /ccode/ )    ? $ccodes->{$celvalue}
           : ( $column =~ /location/ ) ? $locations->{$celvalue}
-          : ( $column =~ /itemtype/ ) ? $itemtypes->{$celvalue}->{description}
+          : ( $column =~ /itemtype/ ) ? $itemtypes_map->{$celvalue}->{translated_description}
           :                             $celvalue;                               # default fallback
         if ( $column =~ /sort1/ ) {
             foreach (@$Bsort1) {

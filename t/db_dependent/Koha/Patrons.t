@@ -19,7 +19,7 @@
 
 use Modern::Perl;
 
-use Test::More tests => 23;
+use Test::More tests => 25;
 use Test::Warn;
 use Time::Fake;
 use DateTime;
@@ -54,6 +54,7 @@ my $new_patron_1  = Koha::Patron->new(
         surname => 'surname for patron1',
         firstname => 'firstname for patron1',
         userid => 'a_nonexistent_userid_1',
+        flags => 1, # Is superlibrarian
     }
 )->store;
 my $new_patron_2  = Koha::Patron->new(
@@ -67,7 +68,7 @@ my $new_patron_2  = Koha::Patron->new(
 )->store;
 
 C4::Context->_new_userenv('xxx');
-C4::Context->set_userenv(0,0,0,'firstname','surname', $library->{branchcode}, 'Midway Public Library', '', '', '');
+set_logged_in_user( $new_patron_1 );
 
 is( Koha::Patrons->search->count, $nb_of_patrons + 2, 'The 2 patrons should have been added' );
 
@@ -185,13 +186,11 @@ subtest 'update_password' => sub {
 };
 
 subtest 'is_expired' => sub {
-    plan tests => 5;
+    plan tests => 4;
     my $patron = $builder->build({ source => 'Borrower' });
     $patron = Koha::Patrons->find( $patron->{borrowernumber} );
     $patron->dateexpiry( undef )->store->discard_changes;
     is( $patron->is_expired, 0, 'Patron should not be considered expired if dateexpiry is not set');
-    $patron->dateexpiry( '0000-00-00' )->store->discard_changes;
-    is( $patron->is_expired, 0, 'Patron should not be considered expired if dateexpiry is not 0000-00-00');
     $patron->dateexpiry( dt_from_string )->store->discard_changes;
     is( $patron->is_expired, 0, 'Patron should not be considered expired if dateexpiry is today');
     $patron->dateexpiry( dt_from_string->add( days => 1 ) )->store->discard_changes;
@@ -203,13 +202,11 @@ subtest 'is_expired' => sub {
 };
 
 subtest 'is_going_to_expire' => sub {
-    plan tests => 9;
+    plan tests => 8;
     my $patron = $builder->build({ source => 'Borrower' });
     $patron = Koha::Patrons->find( $patron->{borrowernumber} );
     $patron->dateexpiry( undef )->store->discard_changes;
     is( $patron->is_going_to_expire, 0, 'Patron should not be considered going to expire if dateexpiry is not set');
-    $patron->dateexpiry( '0000-00-00' )->store->discard_changes;
-    is( $patron->is_going_to_expire, 0, 'Patron should not be considered going to expire if dateexpiry is not 0000-00-00');
 
     t::lib::Mocks::mock_preference('NotifyBorrowerDeparture', 0);
     $patron->dateexpiry( dt_from_string )->store->discard_changes;
@@ -933,6 +930,105 @@ subtest 'search_patrons_to_anonymise & anonymise_issue_history' => sub {
 
     Koha::Patrons->find( $anonymous->{borrowernumber})->delete;
     Koha::Patrons->find( $userenv_patron->{borrowernumber})->delete;
+
+    # Reset IndependentBranches for further tests
+    t::lib::Mocks::mock_preference('IndependentBranches', 0);
+};
+
+subtest 'libraries_where_can_see_patrons + can_see_patron_infos + search_limited' => sub {
+    plan tests => 3;
+
+    # group1
+    #   + library_11
+    #   + library_12
+    # group2
+    #   + library21
+    my $group_1 = Koha::Library::Group->new( { title => 'TEST Group 1', ft_hide_patron_info => 1 } )->store;
+    my $group_2 = Koha::Library::Group->new( { title => 'TEST Group 2', ft_hide_patron_info => 1 } )->store;
+    my $library_11 = $builder->build( { source => 'Branch' } );
+    my $library_12 = $builder->build( { source => 'Branch' } );
+    my $library_21 = $builder->build( { source => 'Branch' } );
+    $library_11 = Koha::Libraries->find( $library_11->{branchcode} );
+    $library_12 = Koha::Libraries->find( $library_12->{branchcode} );
+    $library_21 = Koha::Libraries->find( $library_21->{branchcode} );
+    Koha::Library::Group->new(
+        { branchcode => $library_11->branchcode, parent_id => $group_1->id } )->store;
+    Koha::Library::Group->new(
+        { branchcode => $library_12->branchcode, parent_id => $group_1->id } )->store;
+    Koha::Library::Group->new(
+        { branchcode => $library_21->branchcode, parent_id => $group_2->id } )->store;
+
+    my $sth = C4::Context->dbh->prepare(q|INSERT INTO user_permissions( borrowernumber, module_bit, code ) VALUES (?, 4, ?)|); # 4 for borrowers
+    # 2 patrons from library_11 (group1)
+    # patron_11_1 see patron's infos from outside its group
+    # Setting flags => undef to not be considered as superlibrarian
+    my $patron_11_1 = $builder->build({ source => 'Borrower', value => { branchcode => $library_11->branchcode, flags => undef, }});
+    $patron_11_1 = Koha::Patrons->find( $patron_11_1->{borrowernumber} );
+    $sth->execute( $patron_11_1->borrowernumber, 'edit_borrowers' );
+    $sth->execute( $patron_11_1->borrowernumber, 'view_borrower_infos_from_any_libraries' );
+    # patron_11_2 can only see patron's info from its group
+    my $patron_11_2 = $builder->build({ source => 'Borrower', value => { branchcode => $library_11->branchcode, flags => undef, }});
+    $patron_11_2 = Koha::Patrons->find( $patron_11_2->{borrowernumber} );
+    $sth->execute( $patron_11_2->borrowernumber, 'edit_borrowers' );
+    # 1 patron from library_12 (group1)
+    my $patron_12 = $builder->build({ source => 'Borrower', value => { branchcode => $library_12->branchcode, flags => undef, }});
+    $patron_12 = Koha::Patrons->find( $patron_12->{borrowernumber} );
+    # 1 patron from library_21 (group2) can only see patron's info from its group
+    my $patron_21 = $builder->build({ source => 'Borrower', value => { branchcode => $library_21->branchcode, flags => undef, }});
+    $patron_21 = Koha::Patrons->find( $patron_21->{borrowernumber} );
+    $sth->execute( $patron_21->borrowernumber, 'edit_borrowers' );
+
+    # Pfiou, we can start now!
+    subtest 'libraries_where_can_see_patrons' => sub {
+        plan tests => 3;
+
+        my @branchcodes;
+
+        set_logged_in_user( $patron_11_1 );
+        @branchcodes = $patron_11_1->libraries_where_can_see_patrons;
+        is_deeply( \@branchcodes, [], q|patron_11_1 has view_borrower_infos_from_any_libraries => No restriction| );
+
+        set_logged_in_user( $patron_11_2 );
+        @branchcodes = $patron_11_2->libraries_where_can_see_patrons;
+        is_deeply( \@branchcodes, [ sort ( $library_11->branchcode, $library_12->branchcode ) ], q|patron_11_2 has not view_borrower_infos_from_any_libraries => Can only see patron's from its group| );
+
+        set_logged_in_user( $patron_21 );
+        @branchcodes = $patron_21->libraries_where_can_see_patrons;
+        is_deeply( \@branchcodes, [$library_21->branchcode], q|patron_21 has not view_borrower_infos_from_any_libraries => Can only see patron's from its group| );
+    };
+    subtest 'can_see_patron_infos' => sub {
+        plan tests => 6;
+
+        set_logged_in_user( $patron_11_1 );
+        is( $patron_11_1->can_see_patron_infos( $patron_11_2 ), 1, q|patron_11_1 can see patron_11_2, from its library| );
+        is( $patron_11_1->can_see_patron_infos( $patron_12 ),   1, q|patron_11_1 can see patron_12, from its group| );
+        is( $patron_11_1->can_see_patron_infos( $patron_21 ),   1, q|patron_11_1 can see patron_11_2, from another group| );
+
+        set_logged_in_user( $patron_11_2 );
+        is( $patron_11_2->can_see_patron_infos( $patron_11_1 ), 1, q|patron_11_2 can see patron_11_1, from its library| );
+        is( $patron_11_2->can_see_patron_infos( $patron_12 ),   1, q|patron_11_2 can see patron_12, from its group| );
+        is( $patron_11_2->can_see_patron_infos( $patron_21 ),   0, q|patron_11_2 can NOT see patron_21, from another group| );
+    };
+    subtest 'search_limited' => sub {
+        plan tests => 6;
+
+        set_logged_in_user( $patron_11_1 );
+        my $total_number_of_patrons = $nb_of_patrons + 6; # 2 created before + 4 for these subtests
+        is( Koha::Patrons->search->count, $total_number_of_patrons, 'Non-limited search should return all patrons');
+        is( Koha::Patrons->search_limited->count, $total_number_of_patrons, 'patron_11_1 is allowed to see all patrons' );
+
+        set_logged_in_user( $patron_11_2 );
+        is( Koha::Patrons->search->count, $total_number_of_patrons, 'Non-limited search should return all patrons');
+        is( Koha::Patrons->search_limited->count, 3, 'patron_12_1 is not allowed to see patrons from other groups, only patron_11_1, patron_11_2 and patron_12' );
+
+        set_logged_in_user( $patron_21 );
+        is( Koha::Patrons->search->count, $total_number_of_patrons, 'Non-limited search should return all patrons');
+        is( Koha::Patrons->search_limited->count, 1, 'patron_21 is not allowed to see patrons from other groups, only himself' );
+    };
+    $patron_11_1->delete;
+    $patron_11_2->delete;
+    $patron_12->delete;
+    $patron_21->delete;
 };
 
 subtest 'account_locked' => sub {
@@ -955,8 +1051,86 @@ subtest 'account_locked' => sub {
     $patron->delete;
 };
 
+subtest 'is_child | is_adult' => sub {
+    plan tests => 8;
+    my $category = $builder->build_object(
+        {
+            class => 'Koha::Patron::Categories',
+            value => { category_type => 'A' }
+        }
+    );
+    my $patron_adult = $builder->build_object(
+        {
+            class => 'Koha::Patrons',
+            value => { categorycode => $category->categorycode }
+        }
+    );
+    $category = $builder->build_object(
+        {
+            class => 'Koha::Patron::Categories',
+            value => { category_type => 'I' }
+        }
+    );
+    my $patron_adult_i = $builder->build_object(
+        {
+            class => 'Koha::Patrons',
+            value => { categorycode => $category->categorycode }
+        }
+    );
+    $category = $builder->build_object(
+        {
+            class => 'Koha::Patron::Categories',
+            value => { category_type => 'C' }
+        }
+    );
+    my $patron_child = $builder->build_object(
+        {
+            class => 'Koha::Patrons',
+            value => { categorycode => $category->categorycode }
+        }
+    );
+    $category = $builder->build_object(
+        {
+            class => 'Koha::Patron::Categories',
+            value => { category_type => 'O' }
+        }
+    );
+    my $patron_other = $builder->build_object(
+        {
+            class => 'Koha::Patrons',
+            value => { categorycode => $category->categorycode }
+        }
+    );
+    is( $patron_adult->is_adult, 1, 'Patron from category A should be considered adult' );
+    is( $patron_adult_i->is_adult, 1, 'Patron from category I should be considered adult' );
+    is( $patron_child->is_adult, 0, 'Patron from category C should not be considered adult' );
+    is( $patron_other->is_adult, 0, 'Patron from category O should not be considered adult' );
+
+    is( $patron_adult->is_child, 0, 'Patron from category A should be considered child' );
+    is( $patron_adult_i->is_child, 0, 'Patron from category I should be considered child' );
+    is( $patron_child->is_child, 1, 'Patron from category C should not be considered child' );
+    is( $patron_other->is_child, 0, 'Patron from category O should not be considered child' );
+
+    # Clean up
+    $patron_adult->delete;
+    $patron_adult_i->delete;
+    $patron_child->delete;
+    $patron_other->delete;
+};
+
 $retrieved_patron_1->delete;
 is( Koha::Patrons->search->count, $nb_of_patrons + 1, 'Delete should have deleted the patron' );
 
 $schema->storage->txn_rollback;
 
+# TODO Move to t::lib::Mocks and reuse it!
+sub set_logged_in_user {
+    my ($patron) = @_;
+    C4::Context->set_userenv(
+        $patron->borrowernumber, $patron->userid,
+        $patron->cardnumber,     'firstname',
+        'surname',               $patron->library->branchcode,
+        'Midway Public Library', $patron->flags,
+        '',                      ''
+    );
+}

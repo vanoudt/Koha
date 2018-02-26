@@ -26,8 +26,7 @@
 
 =cut
 
-use strict;
-use warnings;
+use Modern::Perl;
 
 use URI::Escape;
 use C4::Context;
@@ -41,7 +40,6 @@ use C4::Koha;
 use C4::Overdues;
 use C4::Members::Attributes qw(GetBorrowerAttributes);
 use Koha::Patrons;
-use Koha::Patron::Images;
 
 use Koha::Patron::Categories;
 use URI::Escape;
@@ -54,7 +52,7 @@ our ( $template, $loggedinuser, $cookie ) = get_template_and_user(
         query           => $input,
         type            => 'intranet',
         authnotrequired => 0,
-        flagsrequired   => { borrowers => 1, updatecharges => $updatecharges_permissions },
+        flagsrequired   => { borrowers => 'edit_borrowers', updatecharges => $updatecharges_permissions },
         debug           => 1,
     }
 );
@@ -67,15 +65,10 @@ if ( !$borrowernumber ) {
 }
 
 # get borrower details
-my $patron = Koha::Patrons->find( $borrowernumber );
-unless ( $patron ) {
-    print $input->redirect("/cgi-bin/koha/circ/circulation.pl?borrowernumber=$borrowernumber");
-    exit;
-}
-my $category = $patron->category;
-our $borrower = $patron->unblessed;
-$borrower->{description} = $category->description;
-$borrower->{category_type} = $category->category_type;
+my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+our $patron         = Koha::Patrons->find($borrowernumber);
+output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
+
 our $user = $input->remote_user;
 $user ||= q{};
 
@@ -144,16 +137,11 @@ sub add_accounts_to_template {
         }
         push @accounts, $account_line;
     }
-    borrower_add_additional_fields($borrower);
+    borrower_add_additional_fields($patron->unblessed);
 
-    $template->param(%$borrower);
-
-    my $patron_image = Koha::Patron::Images->find($borrower->{borrowernumber});
-    $template->param( picture => 1 ) if $patron_image;
     $template->param(
+        patron   => $patron,
         accounts => \@accounts,
-        borrower => $borrower,
-        categoryname => $borrower->{'description'},
         total    => $total,
     );
     return;
@@ -236,8 +224,6 @@ sub borrower_add_additional_fields {
         my $patron_categories = Koha::Patron::Categories->search_limited({ category_type => 'A' }, {order_by => ['categorycode']});
         $template->param( 'CATCODE_MULTI' => 1) if $patron_categories->count > 1;
         $template->param( 'catcode' => $patron_categories->next->categorycode )  if $patron_categories->count == 1;
-    } elsif ( $b_ref->{category_type} eq 'A' || $b_ref->{category_type} eq 'I' ) {
-        $b_ref->{adultborrower} = 1;
     }
 
     if (C4::Context->preference('ExtendedPatronAttributes')) {

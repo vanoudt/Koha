@@ -47,7 +47,7 @@ my ( $template, $loggedinuser, $cookie ) = get_template_and_user(
         query           => $input,
         type            => 'intranet',
         authnotrequired => 0,
-        flagsrequired   => { borrowers => 1 },
+        flagsrequired   => { borrowers => 'edit_borrowers' },
     }
 );
 
@@ -56,19 +56,14 @@ my $method = $input->param('method') // q{};
 my $visit_id = $input->param('visit_id') // q{};
 
 # Get patron
-my $patron = eval {
-    my $borrowernumber = $input->param('borrowernumber') // q{};
-    return Koha::Patrons->find($borrowernumber);
-};
-push @messages, { type => 'error', code => 'error_on_patron_load' }
-    if ( $@ or !$patron );
+my $borrowernumber = $input->param('borrowernumber');
+my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+my $patron = Koha::Patrons->find($borrowernumber);
+output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
 
 # Get supporting cast
-my ( $branch, $category, $houseboundprofile, $visit, $patron_image );
-if ( $patron ) {
-    $patron_image = $patron->image;
-    $branch = Koha::Libraries->new->find($patron->branchcode);
-    $category = Koha::Patron::Categories->new->find($patron->categorycode);
+my ( $houseboundprofile, $visit );
+if ( $patron ) { # FIXME This test is not needed - output_and_exit_if_error handles it
     $houseboundprofile = $patron->housebound_profile;
 }
 if ( $visit_id ) {
@@ -160,7 +155,7 @@ if ( $method eq 'updateconfirm' and $houseboundprofile ) {
 $method = 'update_or_create' if ( !$houseboundprofile );
 
 # Ensure template has all patron details.
-$template->param(%{$patron->unblessed}) if ( $patron );
+$template->param( patron => $patron );
 
 # Load extended patron attributes if necessary (taken from members/files.pl).
 if ( C4::Context->preference('ExtendedPatronAttributes') and $patron ) {
@@ -171,13 +166,9 @@ if ( C4::Context->preference('ExtendedPatronAttributes') and $patron ) {
     );
 }
 
-$template->param( adultborrower => 1 ) if ( $category->category_type eq 'A' || $category->category_type eq 'I' );
 $template->param(
-    picture            => $patron_image,
     housebound_profile => $houseboundprofile,
     visit              => $houseboundvisit,
-    branch             => $branch,
-    category           => $category,
     messages           => \@messages,
     method             => $method,
     choosers           => $choosers,

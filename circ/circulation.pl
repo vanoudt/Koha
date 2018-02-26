@@ -24,8 +24,7 @@
 
 # FIXME There are too many calls to Koha::Patrons->find in this script
 
-use strict;
-use warnings;
+use Modern::Perl;
 use CGI qw ( -utf8 );
 use DateTime;
 use DateTime::Duration;
@@ -84,6 +83,21 @@ if (!C4::Context->userenv){
 
 my $barcodes = [];
 my $barcode =  $query->param('barcode');
+my $findborrower;
+my $autoswitched;
+my $borrowernumber = $query->param('borrowernumber');
+
+if (C4::Context->preference("AutoSwitchPatron") && $barcode) {
+    if (Koha::Patrons->search( { cardnumber => $barcode} )->count() > 0) {
+        $findborrower = $barcode;
+        undef $barcode;
+        undef $borrowernumber;
+        $autoswitched = 1;
+    }
+}
+$findborrower ||= $query->param('findborrower') || q{};
+$findborrower =~ s|,| |g;
+
 # Barcode given by user could be '0'
 if ( $barcode || ( defined($barcode) && $barcode eq '0' ) ) {
     $barcodes = [ $barcode ];
@@ -105,7 +119,6 @@ if ( $barcode || ( defined($barcode) && $barcode eq '0' ) ) {
 $barcodes = [ uniq @$barcodes ];
 
 my $template_name = q|circ/circulation.tt|;
-my $borrowernumber = $query->param('borrowernumber');
 my $patron = $borrowernumber ? Koha::Patrons->find( $borrowernumber ) : undef;
 my $batch = $query->param('batch');
 my $batch_allowed = 0;
@@ -129,6 +142,7 @@ my ( $template, $loggedinuser, $cookie ) = get_template_and_user (
         flagsrequired   => { circulate => 'circulate_remaining_permissions' },
     }
 );
+my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
 
 my $force_allow_issue = $query->param('forceallow') || 0;
 if (!C4::Auth::haspermission( C4::Context->userenv->{id} , { circulate => 'force_checkout' } )) {
@@ -146,9 +160,6 @@ our %return_failed = ();
 for (@failedreturns) { $return_failed{$_} = 1; }
 
 my $searchtype = $query->param('searchtype') || q{contain};
-
-my $findborrower = $query->param('findborrower') || q{};
-$findborrower =~ s|,| |g;
 
 my $branch = C4::Context->userenv->{'branch'};
 
@@ -263,6 +274,10 @@ if ($findborrower) {
 # get the borrower information.....
 $patron ||= Koha::Patrons->find( $borrowernumber ) if $borrowernumber;
 if ($patron) {
+
+    $template->param( borrowernumber => $patron->borrowernumber );
+    output_and_exit_if_error( $query, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
+
     my $overdues = $patron->get_overdues;
     my $issues = $patron->checkouts;
     my $balance = $patron->account->balance;
@@ -451,9 +466,6 @@ if ($patron) {
         holds_count  => $holds->count(),
         WaitingHolds => $waiting_holds,
     );
-
-    my $category_type = $patron->category->category_type;
-    $template->param( adultborrower => 1 ) if ( $category_type eq 'A' || $category_type eq 'I' );
 }
 
 #title
@@ -545,7 +557,7 @@ $amountold =~ s/^.*\$//;    # remove upto the $, if any
 
 my ( $total, $accts, $numaccts) = GetMemberAccountRecords( $borrowernumber );
 
-if ( $patron && $patron->category->category_type eq 'C') {
+if ( $patron && $patron->is_child) {
     my $patron_categories = Koha::Patron::Categories->search_limited({ category_type => 'A' }, {order_by => ['categorycode']});
     $template->param( 'CATCODE_MULTI' => 1) if $patron_categories->count > 1;
     $template->param( 'catcode' => $patron_categories->next->categorycode )  if $patron_categories->count == 1;
@@ -597,14 +609,10 @@ if ( $patron ) {
     my $av = Koha::AuthorisedValues->search({ category => 'ROADTYPE', authorised_value => $patron->streettype });
     my $roadtype = $av->count ? $av->next->lib : '';
     $template->param(
-        %{ $patron->unblessed },
-        borrower => $patron->unblessed,
         roadtype          => $roadtype,
         patron            => $patron,
         categoryname      => $patron->category->description,
         expiry            => $patron->dateexpiry,
-        is_child          => ( $patron->category->category_type eq 'C' ),
-        picture           => ( $patron->image ? 1 : 0 ),
     );
 }
 
@@ -658,6 +666,7 @@ $template->param(
     has_modifications         => $has_modifications,
     override_high_holds       => $override_high_holds,
     nopermission              => scalar $query->param('nopermission'),
+    autoswitched              => $autoswitched,
 );
 
 output_html_with_http_headers $query, $cookie, $template->output;

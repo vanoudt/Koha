@@ -4,8 +4,7 @@
 # Written by Steve Tonnesen
 # July 26, 2002 (my birthday!)
 
-use strict;
-use warnings;
+use Modern::Perl;
 
 use CGI qw ( -utf8 );
 use C4::Output;
@@ -19,7 +18,6 @@ use Koha::Patron::Categories;
 use Koha::Patrons;
 
 use C4::Output;
-use Koha::Patron::Images;
 use Koha::Token;
 
 my $input = new CGI;
@@ -34,7 +32,7 @@ unless ( $patron ) {
 
 my $category_type = $patron->category->category_type;
 my $bor = $patron->unblessed;
-if( $category_type eq 'S' )  {
+if( $category_type eq 'S' )  { # FIXME Is this really needed?
     $flagsrequired->{'staffaccess'} = 1;
 }
 my ($template, $loggedinuser, $cookie) = get_template_and_user({
@@ -46,6 +44,11 @@ my ($template, $loggedinuser, $cookie) = get_template_and_user({
         debug           => 1,
 });
 
+my $userenv = C4::Context->userenv;
+if ( $userenv and $userenv->{number} ) { # Allow DB user to create a superlibrarian patron
+    my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
+    output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
+}
 
 my %member2;
 $member2{'borrowernumber'}=$member;
@@ -178,14 +181,11 @@ if ($input->param('newflags')) {
         push @loop, \%row;
     }
 
-    if ( $category_type eq 'C') {
+    if ( $patron->is_child ) {
         my $patron_categories = Koha::Patron::Categories->search_limited({ category_type => 'A' }, {order_by => ['categorycode']});
         $template->param( 'CATCODE_MULTI' => 1) if $patron_categories->count > 1;
         $template->param( 'catcode' => $patron_categories->next->categorycode )  if $patron_categories->count == 1;
     }
-
-$template->param( adultborrower => 1 ) if ( $category_type =~ /^(A|I)$/ );
-    $template->param( picture => 1 ) if $patron->image;
 
 if (C4::Context->preference('ExtendedPatronAttributes')) {
     my $attributes = GetBorrowerAttributes($bor->{'borrowernumber'});
@@ -196,29 +196,8 @@ if (C4::Context->preference('ExtendedPatronAttributes')) {
 }
 
 $template->param(
-    borrowernumber => $bor->{'borrowernumber'},
-    cardnumber     => $bor->{'cardnumber'},
-    surname        => $bor->{'surname'},
-    firstname      => $bor->{'firstname'},
-    othernames     => $bor->{'othernames'},
-    categorycode   => $bor->{'categorycode'},
-    category_type  => $category_type,
-    categoryname   => $bor->{'description'},
-    address        => $bor->{address},
-    address2       => $bor->{'address2'},
-    streettype     => $bor->{streettype},
-    city           => $bor->{'city'},
-    state          => $bor->{'state'},
-    zipcode        => $bor->{'zipcode'},
-    country        => $bor->{'country'},
-    phone          => $bor->{'phone'},
-    phonepro       => $bor->{'phonepro'},
-    mobile         => $bor->{'mobile'},
-    email          => $bor->{'email'},
-    emailpro       => $bor->{'emailpro'},
-    branchcode     => $bor->{'branchcode'},
+    patron         => $patron,
     loop           => \@loop,
-    is_child       => ( $category_type eq 'C' ),
     csrf_token =>
         Koha::Token->new->generate_csrf( { session_id => scalar $input->cookie('CGISESSID'), } ),
 );

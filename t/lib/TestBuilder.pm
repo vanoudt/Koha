@@ -473,6 +473,25 @@ sub _gen_default_values {
         Item => {
             more_subfields_xml => undef,
         },
+        Category => {
+            enrolmentfee => 0,
+            reservefee   => 0,
+        },
+        Itemtype => {
+            rentalcharge => 0,
+            defaultreplacecost => 0,
+            processfee => 0,
+        },
+        Aqbookseller => {
+            tax_rate => 0,
+            discount => 0,
+        },
+        AuthHeader => {
+            marcxml => '',
+        },
+        Accountline => {
+            accountno => 0,
+        },
     };
 }
 

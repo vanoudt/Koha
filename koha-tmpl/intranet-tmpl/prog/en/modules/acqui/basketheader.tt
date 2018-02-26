@@ -27,10 +27,9 @@
     [% END %]
 </div>
 
-<div id="doc" class="yui-t7">
-    <div id="bd">
-
-    <div id="yui-main">
+<div class="main container-fluid">
+    <div class="row">
+        <div class="col-md-10 col-md-offset-1 col-lg-8 col-lg-offset-2">
 
     [% IF ( add_form ) %]
         [% IF ( basketno ) %]
@@ -141,8 +140,8 @@
 </div>
 
 [% MACRO jsinclude BLOCK %]
-    <script type="text/javascript" src="[% interface %]/[% theme %]/js/acquisitions-menu.js"></script>
-    <script type="text/javascript" src="[% interface %]/[% theme %]/js/acq.js"></script>
+    <script type="text/javascript" src="[% interface %]/[% theme %]/js/acquisitions-menu_[% KOHA_VERSION %].js"></script>
+    <script type="text/javascript" src="[% interface %]/[% theme %]/js/acq_[% KOHA_VERSION %].js"></script>
 [% END %]
 
 [% INCLUDE 'intranet-bottom.inc' %]

@@ -85,7 +85,7 @@
 
         <p>
             <label for="branchcode">Library: </label>
-            [% SET branches = Branches.all( selected => branchcode_filter ) %]
+            [% SET branches = Branches.all( selected => branchcode_filter, only_my_group => 1 ) %]
             <select name="branchcode_filter" id="branchcode">
                 [% IF branches.size != 1 %]
                   <option value="">Any</option>
@@ -155,37 +155,15 @@
     </ul>
 </div><!-- /header_search -->
 </div><!-- /gradient -->
-<script type="text/javascript">//<![CDATA[
-$(document).ready(function() {
-    $("#filteraction_off, #filteraction_on").on('click', function(e) {
-        e.preventDefault();
-        $('#filters').toggle();
-        $('.filteraction').toggle();
-    });
-    [% IF ( advsearch ) %]
-        $("#filteraction_on").toggle();
-        $("#filters").show();
-    [% ELSE %]
-        $("#filteraction_off").toggle();
-    [% END %]
-    [% SET dateformat = Koha.Preference('dateformat') %]
-    $("#searchfieldstype").change(function() {
-      if ( $(this).val() == 'dateofbirth' ) {
-          [% IF dateformat == 'us' %]
-              var MSG_DATE_FORMAT = _("Dates of birth should be entered in the format 'MM/DD/YYYY'");
-          [% ELSIF dateformat == 'iso' %]
-              var MSG_DATE_FORMAT = _("Dates of birth should be entered in the format 'YYYY-MM-DD'");
-          [% ELSIF dateformat == 'metric' %]
-              var MSG_DATE_FORMAT = _("Dates of birth should be entered in the format 'DD/MM/YYYY'");
-          [% ELSIF dateformat == 'dmydot' %]
-              var MSG_DATE_FORMAT = _("Dates of birth should be entered in the format 'DD.MM.YYYY'");
-          [% END %]
-          $('#searchmember').attr("title",MSG_DATE_FORMAT).tooltip('show');
-      } else {
-          $('#searchmember').tooltip('destroy');
-      }
-    });
-});
-//]]>
-</script>
 <!-- End Patrons Resident Search Box -->
+
+<script type="text/javascript">
+    var advsearch = "[% advsearch %]";
+    var destination = "[% destination %]";
+    var catcode = "[% catcode %]";
+    var dateformat = "[% Koha.Preference('dateformat') %]";
+    var CAN_user_borrowers_edit_borrowers = "[% CAN_user_borrowers_edit_borrowers %]";
+    var NorwegianPatronDBEnable = "[% NorwegianPatronDBEnable %]";
+    var CATCODE_MULTI = "[% CATCODE_MULTI %]";
+    var borrowernumber = "[% patron.borrowernumber %]";
+</script>

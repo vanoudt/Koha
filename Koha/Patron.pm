@@ -21,6 +21,7 @@ package Koha::Patron;
 use Modern::Perl;
 
 use Carp;
+use List::MoreUtils qw( uniq );
 
 use C4::Context;
 use C4::Log;
@@ -125,7 +126,7 @@ sub guarantor {
 sub image {
     my ( $self ) = @_;
 
-    return Koha::Patron::Images->find( $self->borrowernumber );
+    return scalar Koha::Patron::Images->find( $self->borrowernumber );
 }
 
 sub library {
@@ -296,7 +297,7 @@ Returns 1 if the patron is expired or 0;
 sub is_expired {
     my ($self) = @_;
     return 0 unless $self->dateexpiry;
-    return 0 if $self->dateexpiry eq '0000-00-00';
+    return 0 if $self->dateexpiry =~ '^9999';
     return 1 if dt_from_string( $self->dateexpiry ) < dt_from_string->truncate( to => 'day' );
     return 0;
 }
@@ -316,7 +317,7 @@ sub is_going_to_expire {
 
     return 0 unless $delay;
     return 0 unless $self->dateexpiry;
-    return 0 if $self->dateexpiry eq '0000-00-00';
+    return 0 if $self->dateexpiry =~ '^9999';
     return 1 if dt_from_string( $self->dateexpiry )->subtract( days => $delay ) < dt_from_string->truncate( to => 'day' );
     return 0;
 }
@@ -707,6 +708,127 @@ sub account_locked {
     return ( $FailedLoginAttempts
           and $self->login_attempts
           and $self->login_attempts >= $FailedLoginAttempts )? 1 : 0;
+}
+
+=head3 can_see_patron_infos
+
+my $can_see = $patron->can_see_patron_infos( $patron );
+
+Return true if the patron (usually the logged in user) can see the patron's infos for a given patron
+
+=cut
+
+sub can_see_patron_infos {
+    my ( $self, $patron ) = @_;
+    return $self->can_see_patrons_from( $patron->library->branchcode );
+}
+
+=head3 can_see_patrons_from
+
+my $can_see = $patron->can_see_patrons_from( $branchcode );
+
+Return true if the patron (usually the logged in user) can see the patron's infos from a given library
+
+=cut
+
+sub can_see_patrons_from {
+    my ( $self, $branchcode ) = @_;
+    my $can = 0;
+    if ( $self->branchcode eq $branchcode ) {
+        $can = 1;
+    } elsif ( $self->has_permission( { borrowers => 'view_borrower_infos_from_any_libraries' } ) ) {
+        $can = 1;
+    } elsif ( my $library_groups = $self->library->library_groups ) {
+        while ( my $library_group = $library_groups->next ) {
+            if ( $library_group->parent->has_child( $branchcode ) ) {
+                $can = 1;
+                last;
+            }
+        }
+    }
+    return $can;
+}
+
+=head3 libraries_where_can_see_patrons
+
+my $libraries = $patron-libraries_where_can_see_patrons;
+
+Return the list of branchcodes(!) of libraries the patron is allowed to see other patron's infos.
+The branchcodes are arbitrarily returned sorted.
+We are supposing here that the object is related to the logged in patron (use of C4::Context::only_my_library)
+
+An empty array means no restriction, the patron can see patron's infos from any libraries.
+
+=cut
+
+sub libraries_where_can_see_patrons {
+    my ( $self ) = @_;
+    my $userenv = C4::Context->userenv;
+
+    return () unless $userenv; # For tests, but userenv should be defined in tests...
+
+    my @restricted_branchcodes;
+    if (C4::Context::only_my_library) {
+        push @restricted_branchcodes, $self->branchcode;
+    }
+    else {
+        unless (
+            $self->has_permission(
+                { borrowers => 'view_borrower_infos_from_any_libraries' }
+            )
+          )
+        {
+            my $library_groups = $self->library->library_groups({ ft_hide_patron_info => 1 });
+            if ( $library_groups->count )
+            {
+                while ( my $library_group = $library_groups->next ) {
+                    my $parent = $library_group->parent;
+                    if ( $parent->has_child( $self->branchcode ) ) {
+                        push @restricted_branchcodes, $parent->children->get_column('branchcode');
+                    }
+                }
+            }
+
+            @restricted_branchcodes = ( $self->branchcode ) unless @restricted_branchcodes;
+        }
+    }
+
+    @restricted_branchcodes = grep { defined $_ } @restricted_branchcodes;
+    @restricted_branchcodes = uniq(@restricted_branchcodes);
+    @restricted_branchcodes = sort(@restricted_branchcodes);
+    return @restricted_branchcodes;
+}
+
+sub has_permission {
+    my ( $self, $flagsrequired ) = @_;
+    return unless $self->userid;
+    # TODO code from haspermission needs to be moved here!
+    return C4::Auth::haspermission( $self->userid, $flagsrequired );
+}
+
+=head3 is_adult
+
+my $is_adult = $patron->is_adult
+
+Return true if the patron has a category with a type Adult (A) or Organization (I)
+
+=cut
+
+sub is_adult {
+    my ( $self ) = @_;
+    return $self->category->category_type =~ /^(A|I)$/ ? 1 : 0;
+}
+
+=head3 is_child
+
+my $is_child = $patron->is_child
+
+Return true if the patron has a category with a type Child (C)
+
+=cut
+sub is_child {
+    my( $self ) = @_;
+    return $self->category->category_type eq 'C' ? 1 : 0;
 }
 
 =head3 type

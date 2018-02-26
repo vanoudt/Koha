@@ -58,6 +58,8 @@ use C4::Acquisition;
 use C4::Koha;
 use List::MoreUtils qw( any uniq );
 use Koha::Biblios;
+use Koha::IssuingRules;
+use Koha::Items;
 use Koha::Patrons;
 use Koha::RecordProcessor;
 
@@ -132,12 +134,14 @@ if(my $cart_list = $query->cookie("bib_list")){
 my $allow_onshelf_holds;
 my $patron = Koha::Patrons->find( $loggedinuser );
 for my $itm (@all_items) {
-    $allow_onshelf_holds = C4::Reserves::OnShelfHoldsAllowed( $itm, ( $patron ? $patron->unblessed : {} ) );
+    my $item = Koha::Items->find( $itm->{itemnumber} );
+    $allow_onshelf_holds = Koha::IssuingRules->get_onshelfholds_policy( { item => $item, patron => $patron } );
     last if $allow_onshelf_holds;
 }
 
-$template->param( 'AllowOnShelfHolds' => $allow_onshelf_holds );
-$template->param( 'ItemsIssued' => CountItemsIssued( $biblionumber ) );
+if( $allow_onshelf_holds || CountItemsIssued($biblionumber) || $biblio->has_items_waiting_or_intransit ) {
+    $template->param( ReservableItems => 1 );
+}
 
 # adding the $RequestOnOpac param
 my $RequestOnOpac;

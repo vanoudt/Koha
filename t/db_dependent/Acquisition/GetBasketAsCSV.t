@@ -12,6 +12,7 @@ use Koha::Database;
 use Koha::CsvProfile;
 
 use Koha::Acquisition::Orders;
+use t::lib::Mocks;
 
 my $schema = Koha::Database->new()->schema();
 $schema->storage->txn_begin();
@@ -36,6 +37,7 @@ my $csv_profile = Koha::CsvProfile->new({
     type => 'export_basket',
     csv_separator => ',',
     content => 'autor=biblio.author|title=biblio.title|quantity=aqorders.quantity',
+    description => 'csv profile',
 })->store;
 
 my $csv_profile2 = Koha::CsvProfile->new({
@@ -43,6 +45,7 @@ my $csv_profile2 = Koha::CsvProfile->new({
     type => 'export_basket',
     csv_separator => ',',
     content => 'biblio.author | title = biblio.title|quantity=aqorders.quantity',
+    description => 'csv profile 2',
 })->store;
 
 my $basketno;
@@ -70,6 +73,7 @@ is($basket_csv1, 'autor,title,quantity
 ', 'CSV should be generated with user profile');
 
 # Use default template
+t::lib::Mocks::mock_preference('delimiter', ',');
 my $basket_csv2 = C4::Acquisition::GetBasketAsCSV($basketno, $query);
 is($basket_csv2, 'Contract name,Order number,Entry date,ISBN,Author,Title,Publication year,Publisher,Collection title,Note for vendor,Quantity,RRP,Delivery place,Billing place
 "",' . $order->ordernumber  . ',2016-01-02,,"King, Stephen","Test Record",,"","","",3,,"",""

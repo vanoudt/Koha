@@ -41,6 +41,27 @@ Koha::Patron - Koha Patron Object class
 
 =cut
 
+=head3 search_limited
+
+my $patrons = Koha::Patrons->search_limit( $params, $attributes );
+
+Returns all the patrons the logged in user is allowed to see
+
+=cut
+
+sub search_limited {
+    my ( $self, $params, $attributes ) = @_;
+
+    my $userenv = C4::Context->userenv;
+    my @restricted_branchcodes;
+    if ( $userenv and $userenv->{number} ) {
+        my $logged_in_user = Koha::Patrons->find( $userenv->{number} );
+        @restricted_branchcodes = $logged_in_user->libraries_where_can_see_patrons;
+    }
+    $params->{'me.branchcode'} = { -in => \@restricted_branchcodes } if @restricted_branchcodes;
+    return $self->search( $params, $attributes );
+}
+
 =head3 search_housebound_choosers
 
 Returns all Patrons which are Housebound choosers.
@@ -141,7 +162,7 @@ sub search_patrons_to_anonymise {
             ( $library ? ( 'old_issues.branchcode' => $library ) : () ),
         },
         {   join     => ["old_issues"],
-            group_by => 'borrowernumber'
+            distinct => 1,
         }
     );
     return Koha::Patrons->_new_from_dbic($rs);

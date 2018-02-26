@@ -561,10 +561,10 @@ sub ModItem {
 
     $item->{'itemnumber'} = $itemnumber or return;
 
-    my @fields = qw( itemlost withdrawn );
+    my @fields = qw( itemlost withdrawn damaged );
 
     # Only call GetItem if we need to set an "on" date field
-    if ( $item->{itemlost} || $item->{withdrawn} ) {
+    if ( $item->{itemlost} || $item->{withdrawn} || $item->{damaged} ) {
         my $pre_mod_item = GetItem( $item->{'itemnumber'} );
         for my $field (@fields) {
             if (    defined( $item->{$field} )
@@ -621,6 +621,8 @@ sub ModItemTransfer {
 
     # Remove the 'shelving cart' location status if it is being used.
     CartToShelf( $itemnumber ) if ( C4::Context->preference("ReturnToShelvingCart") );
+
+    $dbh->do("UPDATE branchtransfers SET datearrived = NOW(), comments = ? WHERE itemnumber = ? AND datearrived IS NULL", undef, "Canceled, new transfer from $frombranch to $tobranch created", $itemnumber);
 
     #new entry in branchtransfers....
     my $sth = $dbh->prepare(
@@ -882,8 +884,8 @@ sub GetItemsForInventory {
         $query .= 'WHERE ';
         $query .= join ' AND ', @where_strings;
     }
-    $query .= ' ORDER BY items.cn_sort, itemcallnumber, title';
     my $count_query = $select_count . $query;
+    $query .= ' ORDER BY items.cn_sort, itemcallnumber, title';
     $query .= " LIMIT $offset, $size" if ($offset and $size);
     $query = $select_columns . $query;
     my $sth = $dbh->prepare($query);

@@ -14198,7 +14198,7 @@ if( CheckVersion( $DBversion ) ) {
           borrowernumber int(11) NOT NULL,
           date_enrolled timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
           date_canceled timestamp NULL DEFAULT NULL,
-          date_created timestamp NOT NULL DEFAULT '0000-00-00 00:00:00',
+          date_created timestamp NULL DEFAULT NULL,
           date_updated timestamp NULL DEFAULT NULL,
           branchcode varchar(10) NULL DEFAULT NULL,
           PRIMARY KEY (id),
@@ -15220,7 +15220,361 @@ if( CheckVersion( $DBversion ) ) {
     print "Upgrade to $DBversion done (Bug 17682 - Update URL for Google Scholar in OPACSearchForTitleIn)\n";
 }
 
-# DEVELOPER PROCESS, search for anything to execute in the db_update directory
+$DBversion = '17.12.00.007';
+if( CheckVersion( $DBversion ) ) {
+
+    unless ( TableExists( 'library_groups' ) ) {
+        $dbh->do(q{
+            CREATE TABLE library_groups (
+                id INT(11) NOT NULL auto_increment,    -- unique id for each group
+                parent_id INT(11) NULL DEFAULT NULL,   -- if this is a child group, the id of the parent group
+                branchcode VARCHAR(10) NULL DEFAULT NULL, -- The branchcode of a branch belonging to the parent group
+                title VARCHAR(100) NULL DEFAULT NULL,     -- Short description of the goup
+                description TEXT NULL DEFAULT NULL,    -- Longer explanation of the group, if necessary
+                created_on TIMESTAMP NULL,             -- Date and time of creation
+                updated_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, -- Date and time of last
+                PRIMARY KEY id ( id ),
+                FOREIGN KEY (parent_id) REFERENCES library_groups(id) ON UPDATE CASCADE ON DELETE CASCADE,
+                FOREIGN KEY (branchcode) REFERENCES branches(branchcode) ON UPDATE CASCADE ON DELETE CASCADE,
+                UNIQUE KEY title ( title )
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+        });
+    }
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 15707 - Add new table library_groups)\n";
+}
+
+$DBversion = '17.12.00.008';
+if ( CheckVersion($DBversion) ) {
+
+    if ( TableExists( 'branchcategories' ) and TableExists('branchrelations' )) {
+        $dbh->do(q{
+            INSERT INTO library_groups ( title, description, created_on ) VALUES ( '__SEARCH_GROUPS__', 'Library search groups', NOW() )
+        });
+        my $search_groups_root_id = $dbh->last_insert_id(undef, undef, 'library_groups', undef);
+
+        my $sth = $dbh->prepare("SELECT * FROM branchcategories");
+
+        my $sth2 = $dbh->prepare("INSERT INTO library_groups ( parent_id, title, description, created_on ) VALUES ( ?, ?, ?, NOW() )");
+
+        my $sth3 = $dbh->prepare("SELECT * FROM branchrelations WHERE categorycode = ?");
+
+        my $sth4 = $dbh->prepare("INSERT INTO library_groups ( parent_id, branchcode, created_on ) VALUES ( ?, ?, NOW() )");
+
+        $sth->execute();
+        while ( my $lc = $sth->fetchrow_hashref ) {
+            my $description = $lc->{categorycode};
+            $description .= " - " . $lc->{codedescription} if $lc->{codedescription};
+
+            $sth2->execute($search_groups_root_id, $lc->{categoryname}, $description);
+
+            my $subgroup_id = $dbh->last_insert_id(undef, undef, 'library_groups', undef);
+
+            $sth3->execute( $lc->{categorycode} );
+
+            while ( my $l = $sth3->fetchrow_hashref ) {
+                $sth4->execute( $subgroup_id, $l->{branchcode} );
+            }
+        }
+
+        $dbh->do("DROP TABLE branchrelations");
+        $dbh->do("DROP TABLE branchcategories");
+    }
+
+    print "Upgrade to $DBversion done (Bug 16735 - Migrate library search groups into the new hierarchical groups)\n";
+    SetVersion($DBversion);
+}
+
+$DBversion = '17.12.00.009';
+if ( CheckVersion($DBversion) ) {
+    $dbh->do(q|
+        INSERT IGNORE INTO permissions (module_bit, code, description) VALUES
+        (4, 'edit_borrowers', 'Add, modify and view patron information'),
+        (4, 'view_borrower_infos_from_any_libraries', 'View patron infos from any libraries');
+    |);
+
+    # We are lucky here, there is nothing else to do: flags 4-borrowers did not contain sub permissions
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 18403 - Add the view_borrower_infos_from_any_libraries permission )\n";
+}
+
+$DBversion = '17.12.00.010';
+if( CheckVersion( $DBversion ) ) {
+
+    if( !column_exists( 'library_groups', 'ft_hide_patron_info' ) ) {
+        $dbh->do( "ALTER TABLE library_groups ADD COLUMN ft_hide_patron_info tinyint(1) NOT NULL DEFAULT 0 AFTER description" );
+    }
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 20133 - Add library_groups.ft_hide_patron_info)\n";
+}
+
+$DBversion = '17.12.00.011';
+if( CheckVersion( $DBversion ) ) {
+
+    if( !column_exists( 'library_groups', 'ft_search_groups_opac' ) ) {
+        $dbh->do( "ALTER TABLE library_groups ADD COLUMN ft_search_groups_opac tinyint(1) NOT NULL DEFAULT 0 AFTER ft_hide_patron_info" );
+        $dbh->do( "ALTER TABLE library_groups ADD COLUMN ft_search_groups_staff tinyint(1) NOT NULL DEFAULT 0 AFTER ft_search_groups_opac" );
+        $dbh->do( "UPDATE library_groups SET ft_search_groups_staff = 1 AND ft_search_groups_opac = 1 WHERE title = '__SEARCH_GROUPS__'" );
+    }
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 20157 - Use group 'features' to decide which groups to use for group searching functionality)\n";
+}
+
+$DBversion = '17.12.00.012';
+if( CheckVersion( $DBversion ) ) {
+
+    $dbh->do( q|
+        INSERT IGNORE INTO systempreferences (variable,value,options,explanation,type)
+        VALUES ('AutoSwitchPatron', '0', '', 'Auto switch to patron', 'YesNo');
+    |);
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 15752 - Add system preference AutoSwitchPatron)\n";
+}
+
+$DBversion = '17.12.00.013';
+if( CheckVersion( $DBversion ) ) {
+
+    $dbh->do(q|
+        ALTER TABLE club_enrollments MODIFY date_created timestamp NULL DEFAULT NULL;
+    |);
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 20175 - Set DEFAULT NULL value for club_enrollments.date_created)\n";
+}
+
+$DBversion = '17.12.00.014';
+if( CheckVersion( $DBversion ) ) {
+    $dbh->do( "UPDATE marc_subfield_structure SET kohafield=NULL where kohafield='additionalauthors.author'" );
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 19790 - Remove additionalauthors.author from installer files)\n";
+}
+
+$DBversion = '17.12.00.015';
+if( CheckVersion( $DBversion ) ) {
+    $dbh->do(q|
+        ALTER TABLE borrowers
+        MODIFY surname MEDIUMTEXT,
+        MODIFY address MEDIUMTEXT,
+        MODIFY city MEDIUMTEXT
+    |);
+    $dbh->do(q|
+        ALTER TABLE deletedborrowers
+        MODIFY surname MEDIUMTEXT,
+        MODIFY address MEDIUMTEXT,
+        MODIFY city MEDIUMTEXT
+    |);
+
+    $dbh->do(q|
+        ALTER TABLE export_format
+        MODIFY csv_separator VARCHAR(2) NOT NULL DEFAULT ',',
+        MODIFY field_separator VARCHAR(2),
+        MODIFY subfield_separator VARCHAR(2)
+    |);
+    $dbh->do(q|
+        ALTER TABLE export_format MODIFY encoding VARCHAR(255) NOT NULL DEFAULT 'utf8'
+    |);
+
+    $dbh->do(q|
+        ALTER TABLE reserves MODIFY lowestPriority tinyint(1) NOT NULL DEFAULT 0
+    |);
+    $dbh->do(q|
+        ALTER TABLE old_reserves MODIFY lowestPriority tinyint(1) NOT NULL DEFAULT 0
+    |);
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 20144 - Adapt DB structure to work with new SQL modes)\n";
+}
+
+$DBversion = '17.12.00.016';
+if( CheckVersion( $DBversion ) ) {
+    $dbh->do(q|SET foreign_key_checks = 0|);
+    my $sth = $dbh->table_info( '','','','TABLE' );
+
+    while ( my ( $cat, $schema, $name, $type, $remarks ) = $sth->fetchrow_array ) {
+        my $table_sth = $dbh->prepare(qq|SHOW CREATE TABLE $name|);
+        $table_sth->execute;
+        my @table = $table_sth->fetchrow_array;
+        unless ( $table[1] =~ /COLLATE=utf8mb4_unicode_ci/ ) {
+            # Some users might have done the upgrade to utf8mb4 on their own
+            # to support supplemental chars (japanese, chinese, etc)
+            if ( $name eq 'additional_fields' ) {
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        DROP KEY `fields_uniq`,
+                        ADD UNIQUE KEY `fields_uniq` (`tablename` (191), `name` (191))
+                |);
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            elsif ( $name eq 'authorised_values' ) {
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        DROP KEY `lib`,
+                        ADD KEY `lib` (`lib` (191))
+                |);
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            elsif ( $name eq 'borrower_modifications' ) {
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        DROP PRIMARY KEY,
+                        DROP KEY `verification_token`,
+                        ADD PRIMARY KEY (`verification_token` (191),`borrowernumber`),
+                        ADD KEY `verification_token` (`verification_token` (191))
+                |);
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            elsif ( $name eq 'columns_settings' ) {
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        DROP PRIMARY KEY,
+                        ADD PRIMARY KEY (`module` (191), `page` (191), `tablename` (191), `columnname` (191))
+                |);
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            elsif ( $name eq 'illrequestattributes' ) {
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        DROP PRIMARY KEY,
+                        ADD PRIMARY KEY  (`illrequest_id`, `type` (191))
+                |);
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            elsif ( $name eq 'items_search_fields' ) {
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        DROP PRIMARY KEY,
+                        ADD PRIMARY KEY (`name` (191))
+                |);
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            elsif ( $name eq 'marc_subfield_structure' ) {
+                # In this case we convert each column explicitly
+                # to preserve 'tagsubield' collation (utf8mb4_bin)
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        MODIFY COLUMN tagfield
+                            VARCHAR(3) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+                        MODIFY COLUMN tagsubfield
+                            VARCHAR(1) COLLATE utf8mb4_bin NOT NULL DEFAULT '',
+                        MODIFY COLUMN liblibrarian
+                            VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+                        MODIFY COLUMN libopac
+                            VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+                        MODIFY COLUMN kohafield
+                            VARCHAR(40) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+                        MODIFY COLUMN authorised_value
+                            VARCHAR(32) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+                        MODIFY COLUMN authtypecode
+                            VARCHAR(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+                        MODIFY COLUMN value_builder
+                            VARCHAR(80) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+                        MODIFY COLUMN frameworkcode
+                            VARCHAR(4) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+                        MODIFY COLUMN seealso
+                            VARCHAR(1100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+                        MODIFY COLUMN link
+                            VARCHAR(80) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+                        MODIFY COLUMN defaultvalue
+                            MEDIUMTEXT COLLATE utf8mb4_unicode_ci default NULL
+                |);
+                $dbh->do(qq|ALTER TABLE $name CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            elsif ( $name eq 'plugin_data' ) {
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        DROP PRIMARY KEY,
+                        ADD PRIMARY KEY (`plugin_class` (191), `plugin_key` (191))
+                |);
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            elsif ( $name eq 'search_field' ) {
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        DROP KEY `name`,
+                        ADD UNIQUE KEY `name` (`name` (191))
+                |);
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            elsif ( $name eq 'search_marc_map' ) {
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        DROP KEY `index_name`,
+                        ADD UNIQUE KEY `index_name` (`index_name`, `marc_field` (191), `marc_type`)
+                |);
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            elsif ( $name eq 'sms_providers' ) {
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        DROP KEY `name`,
+                        ADD UNIQUE KEY `name` (`name` (191))
+                |);
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            elsif ( $name eq 'tags' ) {
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        DROP PRIMARY KEY,
+                        ADD PRIMARY KEY (`entry` (191))
+                |);
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            elsif ( $name eq 'tags_approval' ) {
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        MODIFY COLUMN `term` VARCHAR(191) NOT NULL
+                |);
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            elsif ( $name eq 'tags_index' ) {
+                $dbh->do(qq|
+                    ALTER TABLE $name
+                        MODIFY COLUMN `term` VARCHAR(191) NOT NULL
+                |);
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+            else {
+                $dbh->do(qq|ALTER TABLE $name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci|);
+            }
+        }
+    }
+    $dbh->do(q|SET foreign_key_checks = 1|);
+
+    print "Upgrade to $DBversion done (Bug 18336 - Convert DB tables to utf8mb4 💩)\n";
+    SetVersion($DBversion);
+}
+
+
+$DBversion = '17.12.00.017';
+if( CheckVersion( $DBversion ) ) {
+
+    if( !column_exists( 'items', 'damaged_on' ) ) {
+        $dbh->do( "ALTER TABLE items ADD COLUMN damaged_on DATETIME NULL AFTER damaged");
+    }
+    if( !column_exists( 'deleteditems', 'damaged_on' ) ) {
+        $dbh->do( "ALTER TABLE deleteditems ADD COLUMN damaged_on DATETIME NULL AFTER damaged");
+    }
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 17672 - Add damaged_on to items and deleteditems tables)\n";
+}
+
+$DBversion = '17.12.00.018';
+if( CheckVersion( $DBversion ) ) {
+
+    $dbh->do( q|
+        INSERT IGNORE INTO systempreferences (`variable`, `value`, `options`, `explanation`, `type`) VALUES  ('BrowseResultSelection','0',NULL,'Enable/Disable browsing search results fromt the bibliographic record detail page in staff client','YesNo')
+    |);
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 19290 - Add system preference BrowseResultSelection)\n";
+}
+
 # SEE bug 13068
 # if there is anything in the atomicupdate, read and execute it.
 

@@ -4,8 +4,7 @@
 #by chris@katipo.co.nz
 #converted to using templates 3/16/03 by mwhansen@hmc.edu
 
-use strict;
-use warnings;
+use Modern::Perl;
 
 use C4::Auth;
 use Koha::AuthUtils;
@@ -33,13 +32,10 @@ my ( $template, $loggedinuser, $cookie, $staffflags ) = get_template_and_user(
         query           => $input,
         type            => "intranet",
         authnotrequired => 0,
-        flagsrequired   => { borrowers => 1 },
+        flagsrequired   => { borrowers => 'edit_borrowers' },
         debug           => 1,
     }
 );
-
-my $flagsrequired;
-$flagsrequired->{borrowers} = 1;
 
 my $member      = $input->param('member');
 my $cardnumber  = $input->param('cardnumber');
@@ -49,11 +45,9 @@ my $newpassword2 = $input->param('newpassword2');
 
 my @errors;
 
+my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
 my $patron = Koha::Patrons->find( $member );
-unless ( $patron ) {
-    print $input->redirect("/cgi-bin/koha/circ/circulation.pl?borrowernumber=$member");
-    exit;
-}
+output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
 
 my $category_type = $patron->category->category_type;
 my $bor = $patron->unblessed;
@@ -101,15 +95,11 @@ if ( $newpassword and not @errors) {
     }
 }
 
-if ( $category_type eq 'C') {
+if ( $patron->is_child ) {
     my $patron_categories = Koha::Patron::Categories->search_limited({ category_type => 'A' }, {order_by => ['categorycode']});
     $template->param( 'CATCODE_MULTI' => 1) if $patron_categories->count > 1;
     $template->param( 'catcode' => $patron_categories->next->categorycode )  if $patron_categories->count == 1;
 }
-
-$template->param( adultborrower => 1 ) if ( $category_type =~ /^(A|I)$/ );
-
-$template->param( picture => 1 ) if $patron->image;
 
 if ( C4::Context->preference('ExtendedPatronAttributes') ) {
     my $attributes = GetBorrowerAttributes( $bor->{'borrowernumber'} );
@@ -120,31 +110,8 @@ if ( C4::Context->preference('ExtendedPatronAttributes') ) {
 }
 
 $template->param(
-    othernames                 => $bor->{'othernames'},
-    surname                    => $bor->{'surname'},
-    firstname                  => $bor->{'firstname'},
-    borrowernumber             => $bor->{'borrowernumber'},
-    cardnumber                 => $bor->{'cardnumber'},
-    categorycode               => $bor->{'categorycode'},
-    category_type              => $category_type,
-    categoryname               => $bor->{'description'},
-    address                    => $bor->{address},
-    address2                   => $bor->{'address2'},
-    streettype                 => $bor->{streettype},
-    city                       => $bor->{'city'},
-    state                      => $bor->{'state'},
-    zipcode                    => $bor->{'zipcode'},
-    country                    => $bor->{'country'},
-    phone                      => $bor->{'phone'},
-    phonepro                   => $bor->{'phonepro'},
-    streetnumber               => $bor->{'streetnumber'},
-    mobile                     => $bor->{'mobile'},
-    email                      => $bor->{'email'},
-    emailpro                   => $bor->{'emailpro'},
-    branchcode                 => $bor->{'branchcode'},
-    userid                     => $bor->{'userid'},
+    patron                     => $patron,
     destination                => $destination,
-    is_child                   => ( $category_type eq 'C' ),
     csrf_token                 => Koha::Token->new->generate_csrf({ session_id => scalar $input->cookie('CGISESSID'), }),
 );
 

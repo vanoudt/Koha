@@ -272,13 +272,7 @@ elsif ( $action eq 'update' ) {
             $borrower_changes{borrowernumber} = $borrowernumber;
             $borrower_changes{extended_attributes} = to_json($extended_attributes_changes);
 
-            # FIXME update the following with
-            # Koha::Patron::Modifications->search({ borrowernumber => $borrowernumber })->delete;
-            # when bug 17091 will be pushed
-            my $patron_modifications = Koha::Patron::Modifications->search({ borrowernumber => $borrowernumber });
-            while ( my $patron_modification = $patron_modifications->next ) {
-                $patron_modification->delete;
-            }
+            Koha::Patron::Modifications->search({ borrowernumber => $borrowernumber })->delete;
 
             my $m = Koha::Patron::Modification->new( \%borrower_changes )->store();
 
@@ -396,7 +390,7 @@ sub CheckForInvalidFields {
         unless ( Email::Valid->address($borrower->{'email'}) ) {
             push(@invalidFields, "email");
         } elsif ( C4::Context->preference("PatronSelfRegistrationEmailMustBeUnique") ) {
-            my $patrons_with_same_email = Koha::Patrons->search(
+            my $patrons_with_same_email = Koha::Patrons->search( # FIXME Should be search_limited?
                 {
                     email => $borrower->{email},
                     (

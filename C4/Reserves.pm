@@ -1078,6 +1078,7 @@ item-level hold request.  An item is available if
 * it is not lost AND
 * it is not damaged AND
 * it is not withdrawn AND
+* a waiting or in transit reserve is placed on
 * does not have a not for loan value > 0
 
 Need to check the issuingrules onshelfholds column,
@@ -1100,10 +1101,12 @@ sub IsAvailableForItemLevelRequest {
     # FIXME - a lot of places in the code do this
     #         or something similar - need to be
     #         consolidated
-    my $itype = _get_itype($item);
+    my $patron = Koha::Patrons->find( $borrower->{borrowernumber} );
+    my $item_object = Koha::Items->find( $item->{itemnumber } );
+    my $itemtype = $item_object->effective_itemtype;
     my $notforloan_per_itemtype
       = $dbh->selectrow_array("SELECT notforloan FROM itemtypes WHERE itemtype = ?",
-                              undef, $itype);
+                              undef, $itemtype);
 
     return 0 if
         $notforloan_per_itemtype ||
@@ -1112,7 +1115,7 @@ sub IsAvailableForItemLevelRequest {
         $item->{withdrawn}        ||
         ($item->{damaged} && !C4::Context->preference('AllowHoldsOnDamagedItems'));
 
-    my $on_shelf_holds = _OnShelfHoldsAllowed($itype,$borrower->{categorycode},$item->{holdingbranch});
+    my $on_shelf_holds = Koha::IssuingRules->get_onshelfholds_policy( { item => $item_object, patron => $patron } );
 
     if ( $on_shelf_holds == 1 ) {
         return 1;
@@ -1140,25 +1143,9 @@ sub IsAvailableForItemLevelRequest {
         }
 
         return $any_available ? 0 : 1;
+    } else { # on_shelf_holds == 0 "If any unavailable" (the description is rather cryptic and could still be improved)
+        return $item->{onloan} || IsItemOnHoldAndFound( $item->{itemnumber} );
     }
-
-    return $item->{onloan} || GetReserveStatus($item->{itemnumber}) eq "Waiting";
-}
-
-=head2 OnShelfHoldsAllowed
-
-  OnShelfHoldsAllowed($itemtype,$borrowercategory,$branchcode);
-
-Checks issuingrules, using the borrowers categorycode, the itemtype, and branchcode to see if onshelf
-holds are allowed, returns true if so.
-
-=cut
-
-sub OnShelfHoldsAllowed {
-    my ($item, $borrower) = @_;
-
-    my $itype = _get_itype($item);
-    return _OnShelfHoldsAllowed($itype,$borrower->{categorycode},$item->{holdingbranch});
 }
 
 sub _get_itype {
@@ -1186,13 +1173,6 @@ sub _get_itype {
         }
     }
     return $itype;
-}
-
-sub _OnShelfHoldsAllowed {
-    my ($itype,$borrowercategory,$branchcode) = @_;
-
-    my $issuing_rule = Koha::IssuingRules->get_effective_issuing_rule({ categorycode => $borrowercategory, itemtype => $itype, branchcode => $branchcode });
-    return $issuing_rule ? $issuing_rule->onshelfholds : undef;
 }
 
 =head2 AlterPriority

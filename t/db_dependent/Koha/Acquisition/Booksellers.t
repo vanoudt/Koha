@@ -44,14 +44,15 @@ subtest '->baskets() tests' => sub {
     $schema->resultset('Aqbasket')->delete();
     Koha::Acquisition::Booksellers->delete();
     $schema->resultset('Subscription')->delete();
+    my $patron = $builder->build_object({ class => 'Koha::Patrons' });
 
     my $vendor = $builder->build_object( { class => 'Koha::Acquisition::Booksellers' } );
 
     is( $vendor->baskets, 0, 'Vendor has no baskets' );
 
     # Add two baskets
-    my $basket_1_id = C4::Acquisition::NewBasket( $vendor->id, 'authorizedby1', 'basketname1' );
-    my $basket_2_id = C4::Acquisition::NewBasket( $vendor->id, 'authorizedby2', 'basketname2' );
+    my $basket_1_id = C4::Acquisition::NewBasket( $vendor->id, $patron->borrowernumber, 'basketname1' );
+    my $basket_2_id = C4::Acquisition::NewBasket( $vendor->id, $patron->borrowernumber, 'basketname2' );
 
     # Re-fetch vendor
     $vendor = Koha::Acquisition::Booksellers->find( $vendor->id );
@@ -109,11 +110,11 @@ subtest '->subscriptions() tests' => sub {
     # Add two subscriptions
     my $subscription_1_id = NewSubscription(
         undef,        'BRANCH2',     $vendor->id,          undef,
-        $id_budget,   $biblionumber, '01-01-2013',         undef,
+        $id_budget,   $biblionumber, '2013-01-01',         undef,
         undef,        undef,         undef,                undef,
         undef,        undef,         undef,                undef,
         undef,        1,             "subscription notes", undef,
-        '01-01-2013', undef,         undef,                undef,
+        '2013-01-01', undef,         undef,                undef,
         'CALL ABC',   0,             "intnotes",           0,
         undef,        undef,         0,                    undef,
         '2013-11-30', 0
@@ -127,11 +128,11 @@ subtest '->subscriptions() tests' => sub {
 
     my $id_subscription2 = NewSubscription(
         undef,        'BRANCH2',     $vendor->id,          undef,
-        $id_budget,   $biblionumber, '01-01-2013',         undef,
+        $id_budget,   $biblionumber, '2013-01-01',         undef,
         undef,        undef,         undef,                undef,
         undef,        undef,         undef,                undef,
         undef,        1,             "subscription notes", undef,
-        '01-01-2013', undef,         undef,                undef,
+        '2013-01-01', undef,         undef,                undef,
         'CALL DEF',   0,             "intnotes",           0,
         undef,        undef,         0,                    undef,
         '2013-07-31', 0

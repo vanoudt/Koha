@@ -41,37 +41,6 @@ TODO: Ask the author to add a proper description
 
 =cut
 
-sub get_categories {
-    my ( $self, $params ) = @_;
-    # TODO This should return Koha::LibraryCategories
-    return $self->{_result}->categorycodes( $params );
-}
-
-=head3 update_categories
-
-TODO: Ask the author to add a proper description
-
-=cut
-
-sub update_categories {
-    my ( $self, $categories ) = @_;
-    $self->_result->delete_related( 'branchrelations' );
-    $self->add_to_categories( $categories );
-}
-
-=head3 add_to_categories
-
-TODO: Ask the author to add a proper description
-
-=cut
-
-sub add_to_categories {
-    my ( $self, $categories ) = @_;
-    for my $category ( @$categories ) {
-        $self->_result->add_to_categorycodes( $category->_result );
-    }
-}
-
 =head3 get_effective_marcorgcode
 
     my $marcorgcode = Koha::Libraries->find( $library_id )->get_effective_marcorgcode();
@@ -85,6 +54,18 @@ sub get_effective_marcorgcode {
     my ( $self )  = @_;
 
     return $self->marcorgcode || C4::Context->preference("MARCOrgCode");
+}
+
+=head3 library_groups
+
+Return the Library groups of this library
+
+=cut
+
+sub library_groups {
+    my ( $self ) = @_;
+    my $rs = $self->_result->library_groups;
+    return Koha::Library::Groups->_new_from_dbic( $rs );
 }
 
 =head2 Internal methods

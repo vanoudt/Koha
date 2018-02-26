@@ -22,8 +22,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Koha; if not, see <http://www.gnu.org/licenses>.
 
-use strict;
-use warnings;
+use Modern::Perl;
 
 use C4::Auth;
 use C4::Output;
@@ -43,7 +42,7 @@ my ($template, $loggedinuser, $cookie) = get_template_and_user(
         query           => $input,
         type            => "intranet",
         authnotrequired => 0,
-        flagsrequired   => { borrowers     => 1,
+        flagsrequired   => { borrowers     => 'edit_borrowers',
                              updatecharges => 'remaining_permissions'},
         debug           => 1,
     }
@@ -52,18 +51,20 @@ my ($template, $loggedinuser, $cookie) = get_template_and_user(
 my $borrowernumber=$input->param('borrowernumber');
 my $action = $input->param('action') || '';
 
-#get patron details
+my $logged_in_user = Koha::Patrons->find( $loggedinuser ) or die "Not logged in";
 my $patron = Koha::Patrons->find( $borrowernumber );
 unless ( $patron ) {
     print $input->redirect("/cgi-bin/koha/circ/circulation.pl?borrowernumber=$borrowernumber");
     exit;
 }
 
+output_and_exit_if_error( $input, $cookie, $template, { module => 'members', logged_in_user => $logged_in_user, current_patron => $patron } );
+
 if ( $action eq 'reverse' ) {
   ReversePayment( scalar $input->param('accountlines_id') );
 }
 
-if ( $patron->category->category_type eq 'C') {
+if ( $patron->is_child ) {
     my $patron_categories = Koha::Patron::Categories->search_limited({ category_type => 'A' }, {order_by => ['categorycode']});
     $template->param( 'CATCODE_MULTI' => 1) if $patron_categories->count > 1;
     $template->param( 'catcode' => $patron_categories->next->categorycode )  if $patron_categories->count == 1;
@@ -95,10 +96,6 @@ foreach my $accountline ( @{$accts}) {
     }
 }
 
-$template->param( adultborrower => 1 ) if ( $patron->category->category_type =~ /^(A|I)$/ );
-
-$template->param( picture => 1 ) if $patron->image;
-
 if (C4::Context->preference('ExtendedPatronAttributes')) {
     my $attributes = GetBorrowerAttributes($borrowernumber);
     $template->param(
@@ -107,14 +104,11 @@ if (C4::Context->preference('ExtendedPatronAttributes')) {
     );
 }
 
-$template->param(%{ $patron->unblessed });
-
 $template->param(
+    patron              => $patron,
     finesview           => 1,
-    borrowernumber      => $borrowernumber,
     total               => sprintf("%.2f",$total),
     totalcredit         => $totalcredit,
-    is_child            => ($patron->category->category_type eq 'C'),
     reverse_col         => $reverse_col,
     accounts            => $accts,
 );

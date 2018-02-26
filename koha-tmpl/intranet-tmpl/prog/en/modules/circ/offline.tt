@@ -216,9 +216,9 @@
 
 [% MACRO jsinclude BLOCK %]
     [% INCLUDE 'calendar.inc' %]
-    <script type="text/javascript" src="[% interface %]/lib/jquery/plugins/jquery.indexeddb.js"></script>
-    <script type="text/javascript" src="[% interface %]/[% theme %]/js/offlinecirc.js"></script>
-    <script type="text/javascript" src="[% interface %]/lib/jquery/plugins/jquery-ui-timepicker-addon.min.js"></script>
+    <script type="text/javascript" src="[% interface %]/lib/jquery/plugins/jquery.indexeddb_[% KOHA_VERSION %].js"></script>
+    <script type="text/javascript" src="[% interface %]/[% theme %]/js/offlinecirc_[% KOHA_VERSION %].js"></script>
+    <script type="text/javascript" src="[% interface %]/lib/jquery/plugins/jquery-ui-timepicker-addon.min_[% KOHA_VERSION %].js"></script>
     [% INCLUDE 'timepicker.inc' %]
     <script type="text/javascript">
         var ALERT_SUCCESSFUL_CHECKIN = _("Checked in item.");
@@ -651,7 +651,7 @@
             kohadb.initialize();
             $('#header_search #circ_search .tip').text(_("Enter patron card number:"));
 
-            $('ul[aria-labelledby="drop3"]').html('<li><a class="toplinks">You cannot change your branch or logout while using offline circulation</a></li>');
+            $('ul[aria-labelledby="logged-in-menu"]').html('<li><a class="toplinks">You cannot change your branch or logout while using offline circulation</a></li>');
 
             // Returns code
             $('#checkin-form, #checkin_search form').submit(function (event) {

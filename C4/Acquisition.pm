@@ -607,6 +607,8 @@ case the AcqCreateItem syspref takes precedence).
 
 sub ModBasketHeader {
     my ($basketno, $basketname, $note, $booksellernote, $contractnumber, $booksellerid, $deliveryplace, $billingplace, $is_standing, $create_items) = @_;
+
+    $is_standing ||= 0;
     my $query = qq{
         UPDATE aqbasket
         SET basketname=?, note=?, booksellernote=?, booksellerid=?, deliveryplace=?, billingplace=?, is_standing=?, create_items=?
@@ -690,7 +692,7 @@ sub GetBasketsInfosByBookseller {
 
     my $dbh = C4::Context->dbh;
     my $query = q{
-        SELECT aqbasket.*,
+        SELECT aqbasket.basketno, aqbasket.basketname, aqbasket.note, aqbasket.booksellernote, aqbasket.contractnumber, aqbasket.creationdate, aqbasket.closedate, aqbasket.booksellerid, aqbasket.authorisedby, aqbasket.booksellerinvoicenumber, aqbasket.basketgroupid, aqbasket.deliveryplace, aqbasket.billingplace, aqbasket.branch, aqbasket.is_standing, aqbasket.create_items,
           SUM(aqorders.quantity) AS total_items,
           SUM(
             IF ( aqorders.orderstatus = 'cancelled', aqorders.quantity, 0 )
@@ -709,7 +711,7 @@ sub GetBasketsInfosByBookseller {
     unless ( $allbaskets ) {
         $query.=" AND (closedate IS NULL OR (aqorders.quantity > aqorders.quantityreceived AND datecancellationprinted IS NULL))";
     }
-    $query.=" GROUP BY aqbasket.basketno";
+    $query.=" GROUP BY aqbasket.basketno, aqbasket.basketname, aqbasket.note, aqbasket.booksellernote, aqbasket.contractnumber, aqbasket.creationdate, aqbasket.closedate, aqbasket.booksellerid, aqbasket.authorisedby, aqbasket.booksellerinvoicenumber, aqbasket.basketgroupid, aqbasket.deliveryplace, aqbasket.billingplace, aqbasket.branch, aqbasket.is_standing, aqbasket.create_items";
 
     my $sth = $dbh->prepare($query);
     $sth->execute($supplierid);
@@ -2148,7 +2150,6 @@ sub GetLateOrders {
         AND aqbasket.closedate IS NOT NULL
         AND (aqorders.datecancellationprinted IS NULL OR aqorders.datecancellationprinted='0000-00-00')
     ";
-    my $having = "";
     if ($dbdriver eq "mysql") {
         $select .= "
         aqorders.quantity - COALESCE(aqorders.quantityreceived,0)                 AS quantity,
@@ -2159,7 +2160,7 @@ sub GetLateOrders {
             $from .= " AND (closedate <= DATE_SUB(CAST(now() AS date),INTERVAL ? DAY)) " ;
             push @query_params, $delay;
         }
-        $having = "HAVING quantity <> 0";
+        $from .= " AND aqorders.quantity - COALESCE(aqorders.quantityreceived,0) <> 0";
     } else {
         # FIXME: account for IFNULL as above
         $select .= "
@@ -2171,6 +2172,7 @@ sub GetLateOrders {
             $from .= " AND (closedate <= (CAST(now() AS date) -(INTERVAL ? DAY)) ";
             push @query_params, $delay;
         }
+        $from .= " AND aqorders.quantity <> 0";
     }
     if (defined $supplierid) {
         $from .= ' AND aqbasket.booksellerid = ? ';
@@ -2201,7 +2203,7 @@ sub GetLateOrders {
         push @query_params, C4::Context->userenv->{branch};
     }
     $from .= " AND orderstatus <> 'cancelled' ";
-    my $query = "$select $from $having\nORDER BY latesince, basketno, borrowers.branchcode, supplier";
+    my $query = "$select $from \nORDER BY latesince, basketno, borrowers.branchcode, supplier";
     $debug and print STDERR "GetLateOrders query: $query\nGetLateOrders args: " . join(" ",@query_params);
     my $sth = $dbh->prepare($query);
     $sth->execute(@query_params);
@@ -2516,7 +2518,8 @@ sub GetInvoices {
 
     my $dbh = C4::Context->dbh;
     my $query = qq{
-        SELECT aqinvoices.*, aqbooksellers.name AS suppliername,
+        SELECT aqinvoices.invoiceid, aqinvoices.invoicenumber, aqinvoices.booksellerid, aqinvoices.shipmentdate, aqinvoices.billingdate, aqinvoices.closedate, aqinvoices.shipmentcost, aqinvoices.shipmentcost_budgetid, aqinvoices.message_id,
+            aqbooksellers.name AS suppliername,
           COUNT(
             DISTINCT IF(
               aqorders.datereceived IS NOT NULL,
@@ -2602,7 +2605,7 @@ sub GetInvoices {
     }
 
     $query .= " WHERE " . join(" AND ", @bind_strs) if @bind_strs;
-    $query .= " GROUP BY aqinvoices.invoiceid ";
+    $query .= " GROUP BY aqinvoices.invoiceid, aqinvoices.invoicenumber, aqinvoices.booksellerid, aqinvoices.shipmentdate, aqinvoices.billingdate, aqinvoices.closedate, aqinvoices.shipmentcost, aqinvoices.shipmentcost_budgetid, aqinvoices.message_id, aqbooksellers.name";
 
     if($args{order_by}) {
         my ($column, $direction) = split / /, $args{order_by};
