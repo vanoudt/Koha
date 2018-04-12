@@ -2,7 +2,7 @@
 
 use Modern::Perl;
 
-use Test::More tests => 32;
+use Test::More tests => 35;
 use CGI;
 use File::Basename;
 use File::Spec;
@@ -45,6 +45,8 @@ ok( $plugin->can('to_marc'), 'Test plugin can to_marc' );
 ok( $plugin->can('opac_online_payment'), 'Test plugin can opac_online_payment' );
 ok( $plugin->can('opac_online_payment_begin'), 'Test plugin can opac_online_payment_begin' );
 ok( $plugin->can('opac_online_payment_end'), 'Test plugin can opac_online_payment_end' );
+ok( $plugin->can('opac_head'), 'Test plugin can opac_head' );
+ok( $plugin->can('opac_js'), 'Test plugin can opac_js' );
 ok( $plugin->can('configure'), 'Test plugin can configure' );
 ok( $plugin->can('install'), 'Test plugin can install' );
 ok( $plugin->can('uninstall'), 'Test plugin can install' );
@@ -121,3 +123,31 @@ for my $pass ( 1 .. 2 ) {
     is( @$info, 0, "Table $table does no longer exist" );
     ok( !( -f $full_pm_path ), "Koha::Plugins::Handler::delete works correctly." );
 }
+
+subtest 'output and output_html tests' => sub {
+
+    plan tests => 6;
+
+    # Trick stdout to be able to test
+    local *STDOUT;
+    my $stdout;
+    open STDOUT, '>', \$stdout;
+
+    my $plugin = Koha::Plugin::Test->new({ enable_plugins => 1, cgi => CGI->new });
+    $plugin->test_output;
+
+    like($stdout, qr/Cache-control: no-cache/, 'force_no_caching sets Cache-control as desired');
+    like($stdout, qr{Content-Type: application/json; charset=UTF-8}, 'Correct content-type');
+    like($stdout, qr{¡Hola output!}, 'Correct data');
+
+    # reset the stdout buffer
+    $stdout = '';
+    close STDOUT;
+    open STDOUT, '>', \$stdout;
+
+    $plugin->test_output_html;
+
+    like($stdout, qr/Cache-control: no-cache/, 'force_no_caching sets Cache-control as desired');
+    like($stdout, qr{Content-Type: text/html; charset=UTF-8}, 'Correct content-type');
+    like($stdout, qr{¡Hola output_html!}, 'Correct data');
+};

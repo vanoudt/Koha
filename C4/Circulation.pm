@@ -22,6 +22,7 @@ package C4::Circulation;
 use strict;
 #use warnings; FIXME - Bug 2505
 use DateTime;
+use POSIX qw( floor );
 use Koha::DateUtils;
 use C4::Context;
 use C4::Stats;
@@ -669,8 +670,9 @@ sub CanBookBeIssued {
 
     my $item = GetItem(undef, $barcode );
     my $issue = Koha::Checkouts->find( { itemnumber => $item->{itemnumber} } );
-	my $biblioitem = GetBiblioItemData($item->{biblioitemnumber});
-	$item->{'itemtype'}=$item->{'itype'}; 
+    my $biblio = Koha::Biblios->find( $item->{biblionumber} );
+    my $biblioitem = $biblio->biblioitem;
+    my $effective_itemtype = $item->{itype}; # GetItem deals with that
     my $dbh             = C4::Context->dbh;
     my $patron_unblessed = $patron->unblessed;
 
@@ -691,8 +693,7 @@ sub CanBookBeIssued {
         my $issuedate = $now->clone();
 
         my $branch = _GetCircControlBranch($item, $patron_unblessed);
-        my $itype = ( C4::Context->preference('item-level_itypes') ) ? $item->{'itype'} : $biblioitem->{'itemtype'};
-        $duedate = CalcDateDue( $issuedate, $itype, $branch, $patron_unblessed );
+        $duedate = CalcDateDue( $issuedate, $effective_itemtype, $branch, $patron_unblessed );
 
         # Offline circ calls AddIssue directly, doesn't run through here
         #  So issuingimpossible should be ok.
@@ -716,7 +717,7 @@ sub CanBookBeIssued {
                      branch => C4::Context->userenv->{'branch'},
                      type => 'localuse',
                      itemnumber => $item->{'itemnumber'},
-                     itemtype => $item->{'itype'},
+                     itemtype => $effective_itemtype,
                      borrowernumber => $patron->borrowernumber,
                      ccode => $item->{'ccode'}}
                     );
@@ -724,17 +725,15 @@ sub CanBookBeIssued {
         return( { STATS => 1 }, {});
     }
 
-    my $flags = C4::Members::patronflags( $patron_unblessed );
-    if ( ref $flags ) {
-        if ( $flags->{GNA} ) {
-            $issuingimpossible{GNA} = 1;
-        }
-        if ( $flags->{'LOST'} ) {
-            $issuingimpossible{CARD_LOST} = 1;
-        }
-        if ( $flags->{'DBARRED'} ) {
-            $issuingimpossible{DEBARRED} = 1;
-        }
+    if ( $patron->gonenoaddress == 1 ) {
+        $issuingimpossible{GNA} = 1;
+    }
+
+    if ( $patron->lost == 1 ) {
+        $issuingimpossible{CARD_LOST} = 1;
+    }
+    if ( $patron->is_debarred ) {
+        $issuingimpossible{DEBARRED} = 1;
     }
 
     if ( $patron->is_expired ) {
@@ -746,8 +745,10 @@ sub CanBookBeIssued {
     #
 
     # DEBTS
-    my ($balance, $non_issue_charges, $other_charges) =
-      C4::Members::GetMemberAccountBalance( $patron->borrowernumber );
+    my $account = $patron->account;
+    my $balance = $account->balance;
+    my $non_issues_charges = $account->non_issues_charges;
+    my $other_charges = $balance - $non_issues_charges;
 
     my $amountlimit = C4::Context->preference("noissuescharge");
     my $allowfineoverride = C4::Context->preference("AllowFineOverride");
@@ -760,8 +761,7 @@ sub CanBookBeIssued {
         my @guarantees = $patron->guarantees();
         my $guarantees_non_issues_charges;
         foreach my $g ( @guarantees ) {
-            my ( $b, $n, $o ) = C4::Members::GetMemberAccountBalance( $g->id );
-            $guarantees_non_issues_charges += $n;
+            $guarantees_non_issues_charges += $g->account->non_issues_charges;
         }
 
         if ( $guarantees_non_issues_charges > $no_issues_charge_guarantees && !$inprocess && !$allowfineoverride) {
@@ -774,21 +774,21 @@ sub CanBookBeIssued {
     }
 
     if ( C4::Context->preference("IssuingInProcess") ) {
-        if ( $non_issue_charges > $amountlimit && !$inprocess && !$allowfineoverride) {
-            $issuingimpossible{DEBT} = sprintf( "%.2f", $non_issue_charges );
-        } elsif ( $non_issue_charges > $amountlimit && !$inprocess && $allowfineoverride) {
-            $needsconfirmation{DEBT} = sprintf( "%.2f", $non_issue_charges );
-        } elsif ( $allfinesneedoverride && $non_issue_charges > 0 && $non_issue_charges <= $amountlimit && !$inprocess ) {
-            $needsconfirmation{DEBT} = sprintf( "%.2f", $non_issue_charges );
+        if ( $non_issues_charges > $amountlimit && !$inprocess && !$allowfineoverride) {
+            $issuingimpossible{DEBT} = $non_issues_charges;
+        } elsif ( $non_issues_charges > $amountlimit && !$inprocess && $allowfineoverride) {
+            $needsconfirmation{DEBT} = $non_issues_charges;
+        } elsif ( $allfinesneedoverride && $non_issues_charges > 0 && $non_issues_charges <= $amountlimit && !$inprocess ) {
+            $needsconfirmation{DEBT} = $non_issues_charges;
         }
     }
     else {
-        if ( $non_issue_charges > $amountlimit && $allowfineoverride ) {
-            $needsconfirmation{DEBT} = sprintf( "%.2f", $non_issue_charges );
-        } elsif ( $non_issue_charges > $amountlimit && !$allowfineoverride) {
-            $issuingimpossible{DEBT} = sprintf( "%.2f", $non_issue_charges );
-        } elsif ( $non_issue_charges > 0 && $allfinesneedoverride ) {
-            $needsconfirmation{DEBT} = sprintf( "%.2f", $non_issue_charges );
+        if ( $non_issues_charges > $amountlimit && $allowfineoverride ) {
+            $needsconfirmation{DEBT} = $non_issues_charges;
+        } elsif ( $non_issues_charges > $amountlimit && !$allowfineoverride) {
+            $issuingimpossible{DEBT} = $non_issues_charges;
+        } elsif ( $non_issues_charges > 0 && $allfinesneedoverride ) {
+            $needsconfirmation{DEBT} = $non_issues_charges;
         }
     }
 
@@ -922,20 +922,20 @@ sub CanBookBeIssued {
             if ($notforloan->{'notforloan'}) {
                 if (!C4::Context->preference("AllowNotForLoanOverride")) {
                     $issuingimpossible{NOT_FOR_LOAN} = 1;
-                    $issuingimpossible{itemtype_notforloan} = $item->{'itype'};
+                    $issuingimpossible{itemtype_notforloan} = $effective_itemtype;
                 } else {
                     $needsconfirmation{NOT_FOR_LOAN_FORCING} = 1;
-                    $needsconfirmation{itemtype_notforloan} = $item->{'itype'};
+                    $needsconfirmation{itemtype_notforloan} = $effective_itemtype;
                 }
             }
         }
-        elsif ($biblioitem->{'notforloan'} == 1){
+        elsif ($biblioitem->notforloan == 1){
             if (!C4::Context->preference("AllowNotForLoanOverride")) {
                 $issuingimpossible{NOT_FOR_LOAN} = 1;
-                $issuingimpossible{itemtype_notforloan} = $biblioitem->{'itemtype'};
+                $issuingimpossible{itemtype_notforloan} = $effective_itemtype;
             } else {
                 $needsconfirmation{NOT_FOR_LOAN_FORCING} = 1;
-                $needsconfirmation{itemtype_notforloan} = $biblioitem->{'itemtype'};
+                $needsconfirmation{itemtype_notforloan} = $effective_itemtype;
             }
         }
     }
@@ -1011,7 +1011,7 @@ sub CanBookBeIssued {
     }
 
     ## CHECK AGE RESTRICTION
-    my $agerestriction  = $biblioitem->{'agerestriction'};
+    my $agerestriction  = $biblioitem->agerestriction;
     my ($restriction_age, $daysToAgeRestriction) = GetAgeRestriction( $agerestriction, $patron->unblessed );
     if ( $daysToAgeRestriction && $daysToAgeRestriction > 0 ) {
         if ( C4::Context->preference('AgeRestrictionOverride') ) {
@@ -1398,7 +1398,8 @@ sub AddIssue {
                     datelastborrowed => DateTime->now( time_zone => C4::Context->tz() )->ymd(),
                 },
                 $item->{'biblionumber'},
-                $item->{'itemnumber'}
+                $item->{'itemnumber'},
+                { log_action => 0 }
             );
             ModDateLastSeen( $item->{'itemnumber'} );
 
@@ -1831,7 +1832,7 @@ sub AddReturn {
             $item->{location} = $item->{permanent_location};
         }
 
-        ModItem( $item, $item->{'biblionumber'}, $item->{'itemnumber'} );
+        ModItem( $item, $item->{'biblionumber'}, $item->{'itemnumber'}, { log_action => 0 } );
     }
 
         # full item data, but no borrowernumber or checkout info (no issue)
@@ -1855,7 +1856,7 @@ sub AddReturn {
             foreach my $key ( keys %$rules ) {
                 if ( $item->{notforloan} eq $key ) {
                     $messages->{'NotForLoanStatusUpdated'} = { from => $item->{notforloan}, to => $rules->{$key} };
-                    ModItem( { notforloan => $rules->{$key} }, undef, $itemnumber );
+                    ModItem( { notforloan => $rules->{$key} }, undef, $itemnumber, { log_action => 0 } );
                     last;
                 }
             }
@@ -1921,7 +1922,7 @@ sub AddReturn {
 
         }
 
-        ModItem({ onloan => undef }, $item->{biblionumber}, $item->{'itemnumber'});
+        ModItem( { onloan => undef }, $item->{biblionumber}, $item->{itemnumber}, { log_action => 0 } );
     }
 
     # the holdingbranch is updated if the document is returned to another location.
@@ -2157,7 +2158,7 @@ sub MarkIssueReturned {
         # And finally delete the issue
         $issue->delete;
 
-        ModItem( { 'onloan' => undef }, undef, $itemnumber );
+        ModItem( { 'onloan' => undef }, undef, $itemnumber, { log_action => 0 } );
 
         if ( C4::Context->preference('StoreLastBorrower') ) {
             my $item = Koha::Items->find( $itemnumber );
@@ -2236,6 +2237,13 @@ sub _debar_user_on_return {
                     $return_date = dt_from_string( $debarment->{expiration}, 'sql' );
                     $has_been_extended = 1;
                 }
+            }
+
+            if ( $issuing_rule->suspension_chargeperiod > 1 ) {
+                # No need to / 1 and do not consider / 0
+                $suspension_days = DateTime::Duration->new(
+                    days => floor( $suspension_days->in_units('days') / $issuing_rule->suspension_chargeperiod )
+                );
             }
 
             my $new_debar_dt =
@@ -2396,7 +2404,7 @@ sub _FixAccountForLostAndReturned {
         }
     );
 
-    ModItem( { paidfor => '' }, undef, $itemnumber );
+    ModItem( { paidfor => '' }, undef, $itemnumber, { log_action => 0 } );
 
     return $credit_id;
 }
@@ -2696,7 +2704,7 @@ sub CanBookBeRenewed {
 
         if ( C4::Context->preference('OPACFineNoRenewalsBlockAutoRenew') ) {
             my $fine_no_renewals = C4::Context->preference("OPACFineNoRenewals");
-            my ( $amountoutstanding ) = C4::Members::GetMemberAccountRecords($patron->borrowernumber);
+            my $amountoutstanding = $patron->account->balance;
             if ( $amountoutstanding and $amountoutstanding > $fine_no_renewals ) {
                 return ( 0, "auto_too_much_oweing" );
             }
@@ -2821,7 +2829,7 @@ sub AddRenewal {
 
     # Update the renewal count on the item, and tell zebra to reindex
     $renews = $item->{renewals} + 1;
-    ModItem({ renewals => $renews, onloan => $datedue->strftime('%Y-%m-%d %H:%M')}, $item->{biblionumber}, $itemnumber);
+    ModItem( { renewals => $renews, onloan => $datedue->strftime('%Y-%m-%d %H:%M')}, $item->{biblionumber}, $itemnumber, { log_action => 0 } );
 
     # Charge a new rental fee, if applicable?
     my ( $charge, $type ) = GetIssuingCharges( $itemnumber, $borrowernumber );
@@ -3700,7 +3708,8 @@ sub ProcessOfflineReturn {
             ModItem(
                 { renewals => 0, onloan => undef },
                 $issue->{'biblionumber'},
-                $itemnumber
+                $itemnumber,
+                { log_action => 0 }
             );
             return "Success.";
         } else {

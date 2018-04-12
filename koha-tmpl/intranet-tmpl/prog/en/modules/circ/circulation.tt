@@ -97,7 +97,7 @@
 [% END %]
 
 [% IF ( DEBT ) %]
-    <li>The patron has a debt of [% DEBT %].</li>
+    <li>The patron has a debt of [% DEBT | $Price %].</li>
 [% END %]
 
 [% IF ( DEBT_GUARANTEES ) %]
@@ -603,7 +603,6 @@ No patron matched <span class="ex">[% message | html %]</span>
           <input type="hidden" name="debt_confirmed" value="[% debt_confirmed %]" />
                 [% IF ( CHARGES ) %]
                         <input type="hidden" name="charges" value="yes" />
-                        <input type="hidden" name="oldamount" value="[% amountold %]" />
                 [% END %]
 </fieldset>
 [% IF ( issue ) %]
@@ -708,7 +707,7 @@ No patron matched <span class="ex">[% message | html %]</span>
                </li>
             [% END %]
 
-                [% IF ( odues ) %]<li>[% IF ( nonreturns ) %]<span class="circ-hlt">Overdues: Patron has ITEMS OVERDUE.</span> <a href="#checkouts">See highlighted items below</a>[% END %]</li>
+                [% IF ( odues ) %]<li><span class="circ-hlt">Overdues: Patron has ITEMS OVERDUE.</span> <a href="#checkouts">See highlighted items below</a></li>
             [% END %]
 
             [% IF ( charges ) %]
@@ -718,7 +717,7 @@ No patron matched <span class="ex">[% message | html %]</span>
             [% IF ( charges_guarantees ) %]
                 <li>
                     <span class="circ-hlt">Fees &amp; Charges:</span> Patron's guarantees collectively owe [% chargesamount_guarantees | $Price %].
-                        [% IF ( charges_guarantees_is_blocker ) %]
+                        [% IF noissues %]
                             <span class="circ-hlt">Checkouts are BLOCKED because fine balance is OVER THE LIMIT.</span>
                         [% END %]
                 </li>
@@ -727,7 +726,7 @@ No patron matched <span class="ex">[% message | html %]</span>
 
             [% IF ( credits ) %]
                 <li>
-                    <span class="circ-hlt">Credits:</span> Patron has a credit[% IF ( creditsamount ) %] of [% creditsamount %][% END %]
+                    <span class="circ-hlt">Credits:</span> Patron has a credit[% IF ( creditsamount ) %] of [% creditsamount | $Price %][% END %]
                 </li>
             [% END %]
 

@@ -33,6 +33,7 @@ use C4::Output;
 use C4::Biblio;
 use C4::Items;
 use C4::Letters;
+use Koha::Account::Lines;
 use Koha::Libraries;
 use Koha::DateUtils;
 use Koha::Holds;
@@ -61,6 +62,10 @@ BEGIN {
     }
 }
 
+# CAS single logout handling
+# Will print header and exit
+C4::Context->preference('casAuthentication') and C4::Auth_with_cas::logout_if_required($query);
+
 my ( $template, $borrowernumber, $cookie ) = get_template_and_user(
     {
         template_name   => "opac-user.tt",
@@ -88,7 +93,8 @@ if (!$borrowernumber) {
 }
 
 # get borrower information ....
-my $borr = Koha::Patrons->find( $borrowernumber )->unblessed;
+my $patron = Koha::Patrons->find( $borrowernumber );
+my $borr = $patron->unblessed;
 
 my (  $today_year,   $today_month,   $today_day) = Today();
 my ($warning_year, $warning_month, $warning_day) = split /-/, $borr->{'dateexpiry'};
@@ -116,7 +122,7 @@ if ( $userdebarred || $borr->{'gonenoaddress'} || $borr->{'lost'} ) {
     $canrenew = 0;
 }
 
-my ( $amountoutstanding ) = GetMemberAccountRecords($borrowernumber);
+my $amountoutstanding = $patron->account->balance;
 if ( $amountoutstanding > 5 ) {
     $borr->{'amountoverfive'} = 1;
 }
@@ -178,32 +184,42 @@ my $overdues_count = 0;
 my @overdues;
 my @issuedat;
 my $itemtypes = { map { $_->{itemtype} => $_ } @{ Koha::ItemTypes->search_with_localization->unblessed } };
-my $issues = GetPendingIssues($borrowernumber);
-if ($issues){
-    foreach my $issue ( sort { $b->{date_due}->datetime() cmp $a->{date_due}->datetime() } @{$issues} ) {
+my $pending_checkouts = $patron->pending_checkouts->search({}, { order_by => [ { -desc => 'date_due' }, { -asc => 'issue_id' } ] });
+if ( $pending_checkouts->count ) { # Useless test
+    while ( my $c = $pending_checkouts->next ) {
+        my $issue = $c->unblessed_all_relateds;
         # check for reserves
         my $restype = GetReserveStatus( $issue->{'itemnumber'} );
         if ( $restype ) {
             $issue->{'reserved'} = 1;
         }
 
-        my ( $total , $accts, $numaccts) = GetMemberAccountRecords( $borrowernumber );
-        my $charges = 0;
-        my $rentalfines = 0;
-        foreach my $ac (@$accts) {
-            if ( $ac->{'itemnumber'} == $issue->{'itemnumber'} ) {
-                $charges += $ac->{'amountoutstanding'}
-                  if $ac->{'accounttype'} eq 'F';
-                $charges += $ac->{'amountoutstanding'}
-                  if $ac->{'accounttype'} eq 'FU';
-                $charges += $ac->{'amountoutstanding'}
-                  if $ac->{'accounttype'} eq 'L';
-                $rentalfines += $ac->{'amountoutstanding'}
-                  if $ac->{'accounttype'} eq 'Rent';
+        # Must be moved in a module if reused
+        my $charges = Koha::Account::Lines->search(
+            {
+                borrowernumber    => $patron->borrowernumber,
+                amountoutstanding => { '>' => 0 },
+                accounttype       => [ 'F', 'FU', 'L' ],
+                itemnumber        => $issue->{itemnumber}
+            },
+            { select => [ { sum => 'amountoutstanding' } ], as => ['charges'] }
+        );
+        $issue->{charges} = $charges->count ? $charges->next->get_column('charges') : 0;
+
+        my $rental_fines = Koha::Account::Lines->search(
+            {
+                borrowernumber    => $patron->borrowernumber,
+                amountoutstanding => { '>' => 0 },
+                accounttype       => 'Rent',
+                itemnumber        => $issue->{itemnumber}
+            },
+            {
+                select => [ { sum => 'amountoutstanding' } ],
+                as     => ['rental_fines']
             }
-        }
-        $issue->{'charges'} = $charges;
-        $issue->{'rentalfines'} = $rentalfines;
+        );
+        $issue->{rentalfines} = $charges->count ? $charges->next->get_column('rental_fines') : 0;
+
         my $marcrecord = GetMarcBiblio({ biblionumber => $issue->{'biblionumber'} });
         $issue->{'subtitle'} = GetRecordValue('subtitle', $marcrecord, GetFrameworkCode($issue->{'biblionumber'}));
         # check if item is renewable
@@ -236,7 +252,7 @@ if ($issues){
             }
         }
 
-        if ( $issue->{'overdue'} ) {
+        if ( $c->is_overdue ) {
             push @overdues, $issue;
             $overdues_count++;
             $issue->{'overdue'} = 1;

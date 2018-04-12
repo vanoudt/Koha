@@ -1,3 +1,4 @@
+[%- USE KohaPlugins -%]
 [% UNLESS ( is_popup ) %]
     [% SET OpacLangSelectorMode = Koha.Preference('OpacLangSelectorMode') %]
     [% IF ( opaccredits ) %]
@@ -38,7 +39,7 @@
                     <div class="navbar-inner">
                         <ul id="i18nMenu" class="nav">
                             <li><p class="lang navbar-text"><strong>Languages:&nbsp;</strong></p></li>
-                            [% FOREACH languages_loo IN languages_loop.sort('rfc4646_subtag') %]
+                            [% FOREACH languages_loo IN languages_loop %]
                                 [% IF ( languages_loo.group_enabled ) %]
                                     [% IF ( languages_loo.plural ) %]
                                         <li class="dropdown">
@@ -284,5 +285,6 @@ $(document).ready(function() {
         </script>
     [% END %]
 [% END %]
+[% KohaPlugins.get_plugins_opac_js %]
 </body>
 </html>

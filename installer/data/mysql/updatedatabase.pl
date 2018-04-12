@@ -15545,7 +15545,7 @@ if( CheckVersion( $DBversion ) ) {
     }
     $dbh->do(q|SET foreign_key_checks = 1|);
 
-    print "Upgrade to $DBversion done (Bug 18336 - Convert DB tables to utf8mb4 💩)\n";
+    print "Upgrade to $DBversion done (Bug 18336 - Convert DB tables to utf8mb4 🎁)\n";
     SetVersion($DBversion);
 }
 
@@ -15573,6 +15573,177 @@ if( CheckVersion( $DBversion ) ) {
 
     SetVersion( $DBversion );
     print "Upgrade to $DBversion done (Bug 19290 - Add system preference BrowseResultSelection)\n";
+}
+
+$DBversion = '17.12.00.019';
+if( CheckVersion( $DBversion ) ) {
+
+    $dbh->do(q|UPDATE auth_subfield_structure SET hidden=1 WHERE hidden<>0|);
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 20074 - Auth_subfield_structure changes hidden attribute)\n";
+}
+
+$DBversion = '17.12.00.020';
+if( CheckVersion( $DBversion ) ) {
+
+    $dbh->do(q|
+        INSERT IGNORE INTO language_descriptions(subtag, type, lang, description)
+        VALUES ('vi', 'language', 'de', 'Vietnamesisch')
+    |);
+
+    $dbh->do(q|
+        UPDATE language_descriptions SET description = 'Tiếng Việt'
+        WHERE subtag = 'vi' and type = 'language' and lang = 'vi'
+    |);
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 20082 - Update descriptions of Vietnamese language)\n";
+}
+
+$DBversion = '17.12.00.021';
+if( CheckVersion( $DBversion ) ) {
+
+    $dbh->do(q|
+        INSERT IGNORE INTO systempreferences ( `variable`, `value`, `options`, `explanation`, `type` ) VALUES
+        ('PurgeSuggestionsOlderThan', '', NULL, 'Default value for cronjob purge_suggestions.pl', 'Integer');
+    |);
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 13287 - Add system preference PurgeSuggestionsOlderThan)\n";
+}
+
+$DBversion = '17.12.00.022';
+if( CheckVersion( $DBversion ) ) {
+
+    if( !column_exists( 'currency', 'p_sep_by_space' ) ) {
+        $dbh->do(q|
+            ALTER TABLE currency ADD COLUMN p_sep_by_space tinyint(1) default 0 after archived
+        |);
+    }
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 4078 - Add column currency.p_sep_by_space)\n";
+}
+
+$DBversion = '17.12.00.023';
+if( CheckVersion( $DBversion ) ) {
+    $dbh->do(q{
+        DELETE FROM systempreferences
+        WHERE variable='checkdigit'
+    });
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 20264 - Remove system preference 'checkdigit')\n";
+}
+
+$DBversion = '17.12.00.024';
+if( CheckVersion( $DBversion ) ) {
+
+    $dbh->do(q{
+        INSERT IGNORE INTO systempreferences (variable,value,options,explanation,type)
+        VALUES ('SelfCheckInMainUserBlock', '', '70|10', 'Add a block of HTML that will display on the self check-in screen.', 'Textarea');
+    });
+
+    $dbh->do(q{
+        INSERT IGNORE INTO systempreferences (variable,value,options,explanation,type)
+        VALUES ('SelfCheckInModule', 0, NULL, 'Enable the standalone self-checkin module.', 'YesNo');
+    });
+
+    $dbh->do(q{
+        INSERT IGNORE INTO systempreferences (variable,value,options,explanation,type)
+        VALUES ('SelfCheckInModuleUserID', NULL, NULL, 'Patron ID (borrowernumber) to be allowed on the self-checkin module.', 'Integer');
+    });
+
+    $dbh->do(q{
+        INSERT IGNORE INTO systempreferences (variable,value,options,explanation,type)
+        VALUES ('SelfCheckInTimeout', 120, NULL, 'Define the number of seconds before the self check-in module times out.', 'Integer');
+    });
+
+    $dbh->do(q{
+        INSERT IGNORE INTO systempreferences (variable,value,options,explanation,type)
+        VALUES ('SelfCheckInUserCSS', '', NULL, 'Add CSS to be included in the self check-in module in an embedded <style> tag.', 'free');
+    });
+
+    $dbh->do(q{
+        INSERT IGNORE INTO systempreferences (variable,value,options,explanation,type)
+        VALUES ('SelfCheckInUserJS', '', NULL, 'Define custom javascript for inclusion in the self check-in module.', 'free');
+    });
+
+    # Add new userflag for self check
+    $dbh->do(q{
+        INSERT IGNORE INTO userflags (bit,flag,flagdesc,defaulton) VALUES
+            (23,'self_check','Self check modules',0);
+    });
+
+    # Add self check-in module subpermission
+    $dbh->do(q{
+        INSERT IGNORE INTO permissions (module_bit,code,description)
+        VALUES (23, 'self_checkin_module', 'Log into the self check-in module');
+    });
+
+    # Add self check-in module subpermission
+    $dbh->do(q{
+        INSERT IGNORE INTO permissions (module_bit,code,description)
+        VALUES (23, 'self_checkout_module', 'Perform self checkout at the OPAC. It should be used for the patron matching the AutoSelfCheckID');
+    });
+
+    # Update patrons with self_checkout permission
+    # IMPORTANT: Needs to happen before removing the old subpermission
+    $dbh->do(q{
+        UPDATE user_permissions
+        SET module_bit = 23,
+                  code = 'self_checkout_module'
+        WHERE module_bit = 1 AND code = 'self_checkout';
+    });
+
+    # Remove old self_checkout permission
+    $dbh->do(q{
+        DELETE IGNORE FROM permissions
+        WHERE  code='self_checkout';
+    });
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 15492: Add a standalone self-checkin module)\n";
+}
+
+$DBversion = '17.12.00.025';
+if( CheckVersion( $DBversion ) ) {
+    $dbh->do(q|
+        INSERT IGNORE INTO systempreferences (variable,value,explanation,options,type)
+        VALUES ('StaffLoginInstructions','','HTML to go into the login box for the staff client',NULL,'Free')
+    |);
+    $dbh->do(q|
+        UPDATE systempreferences
+        SET variable = 'OpacLoginInstructions'
+        WHERE variable = 'NoLoginInstructions'
+    |);
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 20291 - Add StaffLoginInstructions system preference and rename NoLoginInstructions with OpacLoginInstructions)\n";
+}
+
+$DBversion = '17.12.00.026';
+if( CheckVersion( $DBversion ) ) {
+    if( !column_exists( 'issuingrules', 'suspension_chargeperiod' ) ) {
+        $dbh->do(q|
+            ALTER TABLE issuingrules ADD COLUMN suspension_chargeperiod int(11) DEFAULT '1' AFTER maxsuspensiondays;
+        |);
+    }
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 19804: Add issuingrules.suspension_chargeperiod)\n";
+}
+
+$DBversion = '17.12.00.027';
+if( CheckVersion( $DBversion ) ) {
+    $dbh->do(q|
+        INSERT IGNORE INTO systempreferences (`variable`, `value`, `options`, `explanation`, `type`)
+        VALUES ('UseACQFrameworkForBiblioRecords','0','','Use the ACQ framework for the catalog details','YesNo')
+    |);
+
+    SetVersion( $DBversion );
+    print "Upgrade to $DBversion done (Bug 19289 - Add system preference UseACQFrameworkForBiblioRecords)\n";
 }
 
 # SEE bug 13068

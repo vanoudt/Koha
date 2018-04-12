@@ -592,6 +592,11 @@ our $PERL_DEPS = {
         'required' => '0',
         'min_ver'  => '1.09',
     },
+    'Test::MockTime' => {
+        usage      => 'Testing suite',
+        required   => 0,
+        min_ver    => '0.13',
+    },
     'Test::More' => {
         'usage'    => 'Core',
         'required' => '1',
@@ -871,6 +876,22 @@ our $PERL_DEPS = {
         'usage'    => 'Interface third party systems',
         'required' => '0',
         'min_ver'  => '0.17',
+    },
+    'Search::Elasticsearch' => {
+        'usage'    => 'Elasticsearch integration',
+        'required' => '1',
+        'min_ver'  => '5.01',
+        # also required for Zebra installs: about page: bug 20061
+    },
+    'Parallel::ForkManager' => {
+        usage      => 'Testing suite',
+        required   => 0,
+        min_ver    => '0.75',
+    },
+    'Sys::CPU' => {
+        usage      => 'Testing suite',
+        required   => 0,
+        min_ver    => '0.52',
     },
 };
 

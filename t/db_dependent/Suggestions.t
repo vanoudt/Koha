@@ -17,37 +17,35 @@
 
 use Modern::Perl;
 
+use DateTime::Duration;
+use Test::More tests => 103;
+use Test::Warn;
+
 use t::lib::Mocks;
+use t::lib::TestBuilder;
+
 use C4::Context;
 use C4::Members;
 use C4::Letters;
 use C4::Budgets qw( AddBudgetPeriod AddBudget );
-
-use Koha::DateUtils qw( dt_from_string );
+use Koha::Database;
+use Koha::DateUtils qw( dt_from_string output_pref );
 use Koha::Library;
 use Koha::Libraries;
-
-use t::lib::TestBuilder;
-
-use DateTime::Duration;
-use Test::More tests => 102;
-use Test::Warn;
+use Koha::Suggestions;
 
 BEGIN {
     use_ok('C4::Suggestions');
 }
 
+my $schema  = Koha::Database->new->schema;
+$schema->storage->txn_begin;
 my $dbh = C4::Context->dbh;
-my $sql;
-
-# Start transaction
-$dbh->{AutoCommit} = 0;
-$dbh->{RaiseError} = 1;
-
 my $builder = t::lib::TestBuilder->new;
+
 # Reset item types to only the default ones
 $dbh->do(q|DELETE FROM itemtypes;|);
-$sql = "
+my $sql = qq|
 INSERT INTO itemtypes (itemtype, description, rentalcharge, notforloan, imageurl, summary) VALUES
 ('BK', 'Books',5,0,'bridge/book.gif',''),
 ('MX', 'Mixed Materials',5,0,'bridge/kit.gif',''),
@@ -56,7 +54,7 @@ INSERT INTO itemtypes (itemtype, description, rentalcharge, notforloan, imageurl
 ('VM', 'Visual Materials',5,1,'bridge/dvd.gif',''),
 ('MU', 'Music',5,0,'bridge/sound.gif',''),
 ('CR', 'Continuing Resources',5,0,'bridge/periodical.gif',''),
-('REF', 'Reference',0,1,'bridge/reference.gif','');";
+('REF', 'Reference',0,1,'bridge/reference.gif','');|;
 $dbh->do($sql);
 $dbh->do(q|DELETE FROM suggestions|);
 $dbh->do(q|DELETE FROM issues|);
@@ -384,3 +382,37 @@ subtest 'GetUnprocessedSuggestions' => sub {
     $unprocessed_suggestions = C4::Suggestions::GetUnprocessedSuggestions(5);
     is( scalar(@$unprocessed_suggestions), 0, 'GetUnprocessedSuggestions should not return the suggestion, it has not been suggested 5 days ago' );
 };
+
+subtest 'DelSuggestionsOlderThan' => sub {
+    plan tests => 6;
+
+    Koha::Suggestions->delete;
+
+    # Add four suggestions; note that STATUS needs uppercase (FIXME)
+    my $d1 = output_pref({ dt => dt_from_string->add(days => -2), dateformat => 'sql' });
+    my $d2 = output_pref({ dt => dt_from_string->add(days => -4), dateformat => 'sql' });
+    my $sugg01 = $builder->build({ source => 'Suggestion', value => { date => $d1, STATUS => 'ASKED' }});
+    my $sugg02 = $builder->build({ source => 'Suggestion', value => { date => $d1, STATUS => 'CHECKED' }});
+    my $sugg03 = $builder->build({ source => 'Suggestion', value => { date => $d2, STATUS => 'ASKED' }});
+    my $sugg04 = $builder->build({ source => 'Suggestion', value => { date => $d2, STATUS => 'ACCEPTED' }});
+
+    # Test no parameter: should do nothing
+    C4::Suggestions::DelSuggestionsOlderThan();
+    is( Koha::Suggestions->count, 4, 'No suggestions deleted' );
+    # Test zero: should do nothing too
+    C4::Suggestions::DelSuggestionsOlderThan(0);
+    is( Koha::Suggestions->count, 4, 'No suggestions deleted again' );
+    # Test negative value
+    C4::Suggestions::DelSuggestionsOlderThan(-1);
+    is( Koha::Suggestions->count, 4, 'No suggestions deleted for -1' );
+
+    # Test positive values
+    C4::Suggestions::DelSuggestionsOlderThan(5);
+    is( Koha::Suggestions->count, 4, 'No suggestions>5d deleted' );
+    C4::Suggestions::DelSuggestionsOlderThan(3);
+    is( Koha::Suggestions->count, 3, '1 suggestions>3d deleted' );
+    C4::Suggestions::DelSuggestionsOlderThan(1);
+    is( Koha::Suggestions->count, 2, '1 suggestions>1d deleted' );
+};
+
+$schema->storage->txn_rollback;

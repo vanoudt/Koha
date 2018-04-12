@@ -1,8 +1,10 @@
 [% USE Branches %]
+[% USE KohaDates %]
 [% SET footerjs = 1 %]
 [% INCLUDE 'doc-head-open.inc' %]
 <title>Koha &rsaquo; Patrons &rsaquo; Pending discharge requests</title>
 [% INCLUDE 'doc-head-close.inc' %]
+<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables_[% KOHA_VERSION %].css" />
 </head>
 <body id="pat_discharges" class="pat">
 [% INCLUDE 'header.inc' %]
@@ -21,6 +23,8 @@
           <thead>
             <tr>
               <th>Patron</th>
+              <th>Library</th>
+              <th class="title-string">Date requested</th>
               <th>Allow</th>
             </tr>
           </thead>
@@ -28,7 +32,9 @@
             [% FOREACH d IN pending_discharges %]
               <tr>
                 <td><a href="/cgi-bin/koha/members/discharge.pl?borrowernumber=[% d.borrower.borrowernumber %]">[% d.borrower.surname %], [% d.borrower.firstname %]</a></td>
-                <td><a href="/cgi-bin/koha/members/discharges.pl?op=allow&borrowernumber=[% d.borrower.borrowernumber %]">Allow</a></td>
+                <td>[% d.borrower.branchcode.branchname %]</td>
+                <td><span title="[% d.needed %]">[% d.needed | $KohaDates %]</span></td>
+                <td><a class="btn btn-xs btn-default" href="/cgi-bin/koha/members/discharges.pl?op=allow&borrowernumber=[% d.borrower.borrowernumber %]"><i class="fa fa-check"></i> Allow</a></td>
               </tr>
             [% END %]
           </tbody>
@@ -45,6 +51,22 @@
 
 [% MACRO jsinclude BLOCK %]
     <script type="text/javascript" src="[% interface %]/[% theme %]/js/members-menu_[% KOHA_VERSION %].js"></script>
+
+    [% INCLUDE 'datatables.inc' %]
+    <script>
+        $(document).ready(function() {
+            $('#pending_updates table').DataTable($.extend(true, {}, dataTablesDefaults, {
+                paging: false,
+                info: true,
+                searching: true,
+                order: [[2, "asc"]],
+                columnDefs: [
+                    { targets: -1, orderable: false },
+                    { "sType": "title-string", "aTargets" : [ "title-string" ] }
+                ],
+            }));
+        });
+    </script>
 [% END %]
 
 [% INCLUDE 'intranet-bottom.inc' %]

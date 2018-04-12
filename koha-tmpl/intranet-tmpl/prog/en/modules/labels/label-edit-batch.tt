@@ -41,7 +41,7 @@
                     }
                     getstr = items.join("&");
                     item_msg = item_num.join(", ");
-                    var msg = "Are you sure you want to remove label number(s): " + item_msg + " from this batch?"
+                    var msg = _("Are you sure you want to remove label number(s): %s from this batch?").format(item_msg);
                 } else if (document.items.action.checked) {
 		    alert(_("Deletion of label from a batch with only one label will delete the batch.") + "\n\n" + _("If this is what you want, select the 'Delete batch' option from the toolbar"));
                     return; // no deletion for single item batch
@@ -98,10 +98,10 @@
                         alert(_("Please select at least one label to export."));
                         return;     // no batch selected
                     }
-                    return GB_showCenter('Export labels', "/cgi-bin/koha/labels/label-print.pl?batch_id=[% batch_id %]&" + getstr, 400, 800);
+                    return GB_showCenter(_("Export labels"), "/cgi-bin/koha/labels/label-print.pl?batch_id=[% batch_id %]&" + getstr, 400, 800);
                 }
                 else if (mode == 'batch') {
-                    return GB_showCenter('Export labels', "/cgi-bin/koha/labels/label-print.pl?batch_id=[% batch_id %]", 400, 800);
+                    return GB_showCenter(_("Export labels"), "/cgi-bin/koha/labels/label-print.pl?batch_id=[% batch_id %]", 400, 800);
                 }
                 else {
                     // some pass-thru error trapping just in case...
@@ -191,8 +191,24 @@
                 <div class="yui-b">
                         [% INCLUDE 'labels-toolbar.inc' %]
                         [% IF ( err ) %]
+                            [% BLOCK xlate_errtype %]
+                            [%    SWITCH errtype %]
+                            [%       CASE 'ITEM_NOT_REMOVED' %]
+                            <span>Item(s) not removed from batch [% batch_id %].</span>
+                            [%       CASE 'BATCH_NOT_DELETED' %]
+                            <span>Batch [% batch_id %] was not deleted.</span>
+                            [%       CASE 'ITEM_NOT_ADDED' %]
+                            <span>Item(s) not added to batch [% batch_id %].</span>
+                            [%       CASE 'BRANCH_NOT_SET' %]
+                            <span>Library is not set, please set your library before adding items to a batch.</span>
+                            [%       CASE 'BATCH_NOT_DEDUP' %]
+                            <span>Batch [% batch_id %] not fully de-duplicated.</span>
+                            [%       CASE %]
+                            <span>Unknown error type [% errtype %].</span>
+                            [%    END %]
+                            [% END %]
                             <div class="dialog alert">
-                                <strong>WARNING:</strong> An error was encountered and [% errstr %] Please have your system administrator check the error log for details.
+                                <strong>WARNING:</strong> An error was encountered: [% PROCESS xlate_errtype %] Please have your system administrator check the error log for details.
                             </div>
                         [% ELSIF ( duplicate_message ) %]
                             <div class="dialog message">
@@ -249,6 +265,8 @@
                                                                     <th class="anti-the">Summary</th>
                                                                 [% CASE "Item type" %]
                                                                     <th>Item type</th>
+                                                                [% CASE "Call number" %]
+                                                                    <th>Call number</th>
                                                                 [% CASE "Barcode" %]
                                                                     <th>Barcode</th>
                                                                 [% CASE "Select" -%]

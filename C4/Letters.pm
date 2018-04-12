@@ -458,7 +458,7 @@ sub SendAlerts {
                                     : 'text/plain; charset="utf-8"',
                 }
             );
-            unless( sendmail(%mail) ) {
+            unless( Mail::Sendmail::sendmail(%mail) ) {
                 carp $Mail::Sendmail::error;
                 return { error => $Mail::Sendmail::error };
             }
@@ -603,7 +603,7 @@ sub SendAlerts {
               if C4::Context->preference("ClaimsBccCopy");
         }
 
-        unless ( sendmail(%mail) ) {
+        unless ( Mail::Sendmail::sendmail(%mail) ) {
             carp $Mail::Sendmail::error;
             return { error => $Mail::Sendmail::error };
         }
@@ -652,7 +652,7 @@ sub SendAlerts {
                                 : 'text/plain; charset="utf-8"',
             }
         );
-        unless( sendmail(%mail) ) {
+        unless( Mail::Sendmail::sendmail(%mail) ) {
             carp $Mail::Sendmail::error;
             return { error => $Mail::Sendmail::error };
         }
@@ -1026,10 +1026,23 @@ ENDSQL
 
 =head2 SendQueuedMessages ([$hashref]) 
 
-    my $sent = SendQueuedMessages({ verbose => 1, limit => 50 });
+    my $sent = SendQueuedMessages({
+        letter_code => $letter_code,
+        borrowernumber => $who_letter_is_for,
+        limit => 50,
+        verbose => 1,
+        type => 'sms',
+    });
 
-Sends all of the 'pending' items in the message queue, unless the optional
-limit parameter is passed too. The verbose parameter is also optional.
+Sends all of the 'pending' items in the message queue, unless
+parameters are passed.
+
+The letter_code, borrowernumber and limit parameters are used
+to build a parameter set for _get_unsent_messages, thus limiting
+which pending messages will be processed. They are all optional.
+
+The verbose parameter can be used to generate debugging output.
+It is also optional.
 
 Returns number of messages sent.
 
@@ -1038,7 +1051,13 @@ Returns number of messages sent.
 sub SendQueuedMessages {
     my $params = shift;
 
-    my $unsent_messages = _get_unsent_messages( { limit => $params->{limit} } );
+    my $which_unsent_messages  = {
+        'limit'          => $params->{'limit'} // 0,
+        'borrowernumber' => $params->{'borrowernumber'} // q{},
+        'letter_code'    => $params->{'letter_code'} // q{},
+        'type'           => $params->{'type'} // q{},
+    };
+    my $unsent_messages = _get_unsent_messages( $which_unsent_messages );
     MESSAGE: foreach my $message ( @$unsent_messages ) {
         # warn Data::Dumper->Dump( [ $message ], [ 'message' ] );
         warn sprintf( 'sending %s message to patron: %s',
@@ -1224,15 +1243,15 @@ sub ResendMessage {
 
 =head2 _add_attachements
 
-named parameters:
-letter - the standard letter hashref
-attachments - listref of attachments. each attachment is a hashref of:
-  type - the mime type, like 'text/plain'
-  content - the actual attachment
-  filename - the name of the attachment.
-message - a MIME::Lite object to attach these to.
+  named parameters:
+  letter - the standard letter hashref
+  attachments - listref of attachments. each attachment is a hashref of:
+    type - the mime type, like 'text/plain'
+    content - the actual attachment
+    filename - the name of the attachment.
+  message - a MIME::Lite object to attach these to.
 
-returns your letter object, with the content updated.
+  returns your letter object, with the content updated.
 
 =cut
 
@@ -1268,6 +1287,20 @@ sub _add_attachments {
 
 }
 
+=head2 _get_unsent_messages
+
+  This function's parameter hash reference takes the following
+  optional named parameters:
+   message_transport_type: method of message sending (e.g. email, sms, etc.)
+   borrowernumber        : who the message is to be sent
+   letter_code           : type of message being sent (e.g. PASSWORD_RESET)
+   limit                 : maximum number of messages to send
+
+  This function returns an array of matching hash referenced rows from
+  message_queue with some borrower information added.
+
+=cut
+
 sub _get_unsent_messages {
     my $params = shift;
 
@@ -1282,12 +1315,20 @@ sub _get_unsent_messages {
     my @query_params = ('pending');
     if ( ref $params ) {
         if ( $params->{'message_transport_type'} ) {
-            $statement .= ' AND message_transport_type = ? ';
+            $statement .= ' AND mq.message_transport_type = ? ';
             push @query_params, $params->{'message_transport_type'};
         }
         if ( $params->{'borrowernumber'} ) {
-            $statement .= ' AND borrowernumber = ? ';
+            $statement .= ' AND mq.borrowernumber = ? ';
             push @query_params, $params->{'borrowernumber'};
+        }
+        if ( $params->{'letter_code'} ) {
+            $statement .= ' AND mq.letter_code = ? ';
+            push @query_params, $params->{'letter_code'};
+        }
+        if ( $params->{'type'} ) {
+            $statement .= ' AND message_transport_type = ? ';
+            push @query_params, $params->{'type'};
         }
         if ( $params->{'limit'} ) {
             $statement .= ' limit ? ';
@@ -1360,7 +1401,7 @@ sub _send_message_by_email {
 
     _update_message_to_address($message->{'message_id'},$to_address) unless $message->{to_address}; #if initial message address was empty, coming here means that a to address was found and queue should be updated
 
-    if ( sendmail( %sendmail_params ) ) {
+    if ( Mail::Sendmail::sendmail( %sendmail_params ) ) {
         _set_message_status( { message_id => $message->{'message_id'},
                 status     => 'sent' } );
         return 1;
@@ -1477,7 +1518,8 @@ sub _process_tt {
 
     my $tt_params = { %{ _get_tt_params( $tables ) }, %{ _get_tt_params( $loops, 'is_a_loop' ) }, %$substitute };
 
-    $content = qq|[% USE KohaDates %]$content|;
+    $content = add_tt_filters( $content );
+    $content = qq|[% USE KohaDates %][% USE Remove_MARC_punctuation %]$content|;
 
     my $output;
     $template->process( \$content, $tt_params, \$output ) || croak "ERROR PROCESSING TEMPLATE: " . $template->error();
@@ -1503,6 +1545,12 @@ sub _get_tt_params {
             singular => 'biblio',
             plural   => 'biblios',
             pk       => 'biblionumber',
+        },
+        biblioitems => {
+            module   => 'Koha::Biblioitems',
+            singular => 'biblioitem',
+            plural   => 'biblioitems',
+            pk       => 'biblioitemnumber',
         },
         borrowers => {
             module   => 'Koha::Patrons',
@@ -1651,6 +1699,23 @@ sub _get_tt_params {
     $params->{today} = output_pref({ dt => dt_from_string, dateformat => 'iso' });
 
     return $params;
+}
+
+=head3 add_tt_filters
+
+$content = add_tt_filters( $content );
+
+Add TT filters to some specific fields if needed.
+
+For now we only add the Remove_MARC_punctuation TT filter to biblio and biblioitem fields
+
+=cut
+
+sub add_tt_filters {
+    my ( $content ) = @_;
+    $content =~ s|\[%\s*biblio\.(.*?)\s*%\]|[% biblio.$1 \| \$Remove_MARC_punctuation %]|gxms;
+    $content =~ s|\[%\s*biblioitem\.(.*?)\s*%\]|[% biblioitem.$1 \| \$Remove_MARC_punctuation %]|gxms;
+    return $content;
 }
 
 =head2 get_item_content

@@ -18,7 +18,7 @@
 
 use Modern::Perl;
 
-use Test::More tests => 23;
+use Test::More tests => 25;
 use Test::MockModule;
 use Test::Warn;
 
@@ -27,8 +27,8 @@ use t::lib::Mocks;
 
 use Koha::Account;
 use Koha::Account::Lines;
-use Koha::Account::Line;
 use Koha::Account::Offsets;
+use Koha::DateUtils qw( dt_from_string );
 
 BEGIN {
     use_ok('C4::Accounts');
@@ -283,7 +283,7 @@ subtest "Koha::Account::pay particular line tests" => sub {
     my $line3 = Koha::Account::Line->new({ borrowernumber => $borrower->borrowernumber, amountoutstanding => 3 })->store();
     my $line4 = Koha::Account::Line->new({ borrowernumber => $borrower->borrowernumber, amountoutstanding => 4 })->store();
 
-    is( $account->balance(), "10.000000", "Account balance is 10" );
+    is( $account->balance(), 10, "Account balance is 10" );
 
     $account->pay(
         {
@@ -325,7 +325,7 @@ subtest "Koha::Account::pay writeoff tests" => sub {
 
     my $line = Koha::Account::Line->new({ borrowernumber => $borrower->borrowernumber, amountoutstanding => 42 })->store();
 
-    is( $account->balance(), "42.000000", "Account balance is 42" );
+    is( $account->balance(), 42, "Account balance is 42" );
 
     my $id = $account->pay(
         {
@@ -625,6 +625,223 @@ subtest "Koha::Account::chargelostitem tests" => sub {
     $procfee  = Koha::Account::Lines->find({ borrowernumber => $cli_borrowernumber, itemnumber => $cli_itemnumber4, accounttype => 'PF' });
     is( $lostfine->amount, "6.120000", "Lost fine equals replacementcost when pref on and default set");
     is( $procfee->amount, "2.040000",  "Processing fee if processing fee");
+};
+
+subtest "Koha::Account::non_issues_charges tests" => sub {
+    plan tests => 21;
+
+    my $patron = $builder->build_object( { class => 'Koha::Patrons' } );
+
+    my $today  = dt_from_string;
+    my $res    = 3;
+    my $rent   = 5;
+    my $manual = 7;
+    Koha::Account::Line->new(
+        {
+            borrowernumber    => $patron->borrowernumber,
+            accountno         => 1,
+            date              => $today,
+            description       => 'a Res fee',
+            accounttype       => 'Res',
+            amountoutstanding => $res,
+        }
+    )->store;
+    Koha::Account::Line->new(
+        {
+            borrowernumber    => $patron->borrowernumber,
+            accountno         => 2,
+            date              => $today,
+            description       => 'a Rental fee',
+            accounttype       => 'Rent',
+            amountoutstanding => $rent,
+        }
+    )->store;
+    Koha::Account::Line->new(
+        {
+            borrowernumber    => $patron->borrowernumber,
+            accountno         => 3,
+            date              => $today,
+            description       => 'a Manual invoice fee',
+            accounttype       => 'Copie',
+            amountoutstanding => $manual,
+        }
+    )->store;
+    Koha::AuthorisedValue->new(
+        {
+            category         => 'MANUAL_INV',
+            authorised_value => 'Copie',
+            lib              => 'Fee for copie',
+        }
+    )->store;
+
+    my $account = $patron->account;
+
+    t::lib::Mocks::mock_preference( 'HoldsInNoissuesCharge',   0 );
+    t::lib::Mocks::mock_preference( 'RentalsInNoissuesCharge', 0 );
+    t::lib::Mocks::mock_preference( 'ManInvInNoissuesCharge',  0 );
+    my ( $total, $non_issues_charges ) = ( $account->balance, $account->non_issues_charges );
+    my $other_charges = $total - $non_issues_charges;
+    is(
+        $account->balance,
+        $res + $rent + $manual,
+        'Total charges should be Res + Rent + Manual'
+    );
+    is( $non_issues_charges, 0,
+        'If 0|0|0 there should not have non issues charges' );
+    is( $other_charges, 15, 'If 0|0|0 there should only have other charges' );
+
+    t::lib::Mocks::mock_preference( 'HoldsInNoissuesCharge',   0 );
+    t::lib::Mocks::mock_preference( 'RentalsInNoissuesCharge', 0 );
+    t::lib::Mocks::mock_preference( 'ManInvInNoissuesCharge',  1 );
+    ( $total, $non_issues_charges ) = ( $account->balance, $account->non_issues_charges );
+    $other_charges = $total - $non_issues_charges;
+    is(
+        $total,
+        $res + $rent + $manual,
+        'Total charges should be Res + Rent + Manual'
+    );
+    is( $non_issues_charges, $manual,
+        'If 0|0|1 Only Manual should be a non issue charge' );
+    is(
+        $other_charges,
+        $res + $rent,
+        'If 0|0|1 Res + Rent should be other charges'
+    );
+
+    t::lib::Mocks::mock_preference( 'HoldsInNoissuesCharge',   0 );
+    t::lib::Mocks::mock_preference( 'RentalsInNoissuesCharge', 1 );
+    t::lib::Mocks::mock_preference( 'ManInvInNoissuesCharge',  0 );
+    ( $total, $non_issues_charges ) = ( $account->balance, $account->non_issues_charges );
+    $other_charges = $total - $non_issues_charges;
+    is(
+        $total,
+        $res + $rent + $manual,
+        'Total charges should be Res + Rent + Manual'
+    );
+    is( $non_issues_charges, $rent,
+        'If 0|1|0 Only Rental should be a non issue charge' );
+    is(
+        $other_charges,
+        $res + $manual,
+        'If 0|1|0 Rent + Manual should be other charges'
+    );
+
+    t::lib::Mocks::mock_preference( 'HoldsInNoissuesCharge',   0 );
+    t::lib::Mocks::mock_preference( 'RentalsInNoissuesCharge', 1 );
+    t::lib::Mocks::mock_preference( 'ManInvInNoissuesCharge',  1 );
+    ( $total, $non_issues_charges ) = ( $account->balance, $account->non_issues_charges );
+    $other_charges = $total - $non_issues_charges;
+    is(
+        $total,
+        $res + $rent + $manual,
+        'Total charges should be Res + Rent + Manual'
+    );
+    is(
+        $non_issues_charges,
+        $rent + $manual,
+        'If 0|1|1 Rent + Manual should be non issues charges'
+    );
+    is( $other_charges, $res, 'If 0|1|1 there should only have other charges' );
+
+    t::lib::Mocks::mock_preference( 'HoldsInNoissuesCharge',   1 );
+    t::lib::Mocks::mock_preference( 'RentalsInNoissuesCharge', 0 );
+    t::lib::Mocks::mock_preference( 'ManInvInNoissuesCharge',  0 );
+    ( $total, $non_issues_charges ) = ( $account->balance, $account->non_issues_charges );
+    $other_charges = $total - $non_issues_charges;
+    is(
+        $total,
+        $res + $rent + $manual,
+        'Total charges should be Res + Rent + Manual'
+    );
+    is( $non_issues_charges, $res,
+        'If 1|0|0 Only Res should be non issues charges' );
+    is(
+        $other_charges,
+        $rent + $manual,
+        'If 1|0|0 Rent + Manual should be other charges'
+    );
+
+    t::lib::Mocks::mock_preference( 'HoldsInNoissuesCharge',   1 );
+    t::lib::Mocks::mock_preference( 'RentalsInNoissuesCharge', 1 );
+    t::lib::Mocks::mock_preference( 'ManInvInNoissuesCharge',  0 );
+    ( $total, $non_issues_charges ) = ( $account->balance, $account->non_issues_charges );
+    $other_charges = $total - $non_issues_charges;
+    is(
+        $total,
+        $res + $rent + $manual,
+        'Total charges should be Res + Rent + Manual'
+    );
+    is(
+        $non_issues_charges,
+        $res + $rent,
+        'If 1|1|0 Res + Rent should be non issues charges'
+    );
+    is( $other_charges, $manual,
+        'If 1|1|0 Only Manual should be other charges' );
+
+    t::lib::Mocks::mock_preference( 'HoldsInNoissuesCharge',   1 );
+    t::lib::Mocks::mock_preference( 'RentalsInNoissuesCharge', 1 );
+    t::lib::Mocks::mock_preference( 'ManInvInNoissuesCharge',  1 );
+    ( $total, $non_issues_charges ) = ( $account->balance, $account->non_issues_charges );
+    $other_charges = $total - $non_issues_charges;
+    is(
+        $total,
+        $res + $rent + $manual,
+        'Total charges should be Res + Rent + Manual'
+    );
+    is(
+        $non_issues_charges,
+        $res + $rent + $manual,
+        'If 1|1|1 Res + Rent + Manual should be non issues charges'
+    );
+    is( $other_charges, 0, 'If 1|1|1 there should not have any other charges' );
+};
+
+subtest "Koha::Account::non_issues_charges tests" => sub {
+    plan tests => 9;
+
+    my $patron = $builder->build_object(
+        {
+            class => "Koha::Patrons",
+            value => {
+                firstname    => 'Test',
+                surname      => 'Patron',
+                categorycode => $categorycode,
+                branchcode   => $branchcode
+            }
+        }
+    );
+
+    my $debit = Koha::Account::Line->new({ borrowernumber => $patron->id, date => '1900-01-01', amountoutstanding => 0 })->store();
+    my $credit = Koha::Account::Line->new({ borrowernumber => $patron->id, date => '1900-01-01', amountoutstanding => -5 })->store();
+    my $offset = Koha::Account::Offset->new({ credit_id => $credit->id, debit_id => $debit->id, type => 'Payment' })->store();
+    purge_zero_balance_fees( 1 );
+    my $debit_2 = Koha::Account::Lines->find( $debit->id );
+    my $credit_2 = Koha::Account::Lines->find( $credit->id );
+    ok( $debit_2, 'Debit was correctly not deleted when credit has balance' );
+    ok( $credit_2, 'Credit was correctly not deleted when credit has balance' );
+    is( Koha::Account::Lines->count({ borrowernumber => $patron->id }), 2, "The 2 account lines still exists" );
+
+    $debit = Koha::Account::Line->new({ borrowernumber => $patron->id, date => '1900-01-01', amountoutstanding => 5 })->store();
+    $credit = Koha::Account::Line->new({ borrowernumber => $patron->id, date => '1900-01-01', amountoutstanding => 0 })->store();
+    $offset = Koha::Account::Offset->new({ credit_id => $credit->id, debit_id => $debit->id, type => 'Payment' })->store();
+    purge_zero_balance_fees( 1 );
+    $debit_2 = $credit_2 = undef;
+    $debit_2 = Koha::Account::Lines->find( $debit->id );
+    $credit_2 = Koha::Account::Lines->find( $credit->id );
+    ok( $debit_2, 'Debit was correctly not deleted when debit has balance' );
+    ok( $credit_2, 'Credit was correctly not deleted when debit has balance' );
+    is( Koha::Account::Lines->count({ borrowernumber => $patron->id }), 2 + 2, "The 2 + 2 account lines still exists" );
+
+    $debit = Koha::Account::Line->new({ borrowernumber => $patron->id, date => '1900-01-01', amountoutstanding => 0 })->store();
+    $credit = Koha::Account::Line->new({ borrowernumber => $patron->id, date => '1900-01-01', amountoutstanding => 0 })->store();
+    $offset = Koha::Account::Offset->new({ credit_id => $credit->id, debit_id => $debit->id, type => 'Payment' })->store();
+    purge_zero_balance_fees( 1 );
+    $debit_2 = Koha::Account::Lines->find( $debit->id );
+    $credit_2 = Koha::Account::Lines->find( $credit->id );
+    ok( !$debit_2, 'Debit was correctly deleted' );
+    ok( !$credit_2, 'Credit was correctly deleted' );
+    is( Koha::Account::Lines->count({ borrowernumber => $patron->id }), 2 + 2, "The 2 + 2 account lines still exists, the last 2 have been deleted ok" );
 };
 
 1;

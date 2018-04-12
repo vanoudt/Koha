@@ -523,7 +523,7 @@ Circulation:
               choices:
                   yes: Allow
                   no: "Don't allow"
-            - staff to override hold policies when placing holds.
+            - staff to force addition of holds even if the patron already has the maximum number of holds allowed.
         -
             - pref: AllowHoldsOnDamagedItems
               choices:
@@ -783,7 +783,33 @@ Circulation:
             - pref: ProcessingFeeNote
               type: textarea
               class: code
-
+    Self check-in module:
+        -
+            - "Include the following HTML on the self check-in screen:"
+            - pref: SelfCheckInMainUserBlock
+              type: textarea
+              class: code
+        -
+            - pref: SelfCheckInModule
+              choices:
+                  yes: Enable
+                  no: "Don't enable"
+            - "the standalone self check-in module (available at: /cgi-bin/koha/sci/sci-main.pl)"
+        -
+            - "Reset the current self check-in screen after"
+            - pref: SelfCheckInTimeout
+              class: integer
+            - seconds.
+        -
+            - "Include the following CSS on all the self check-in screens:"
+            - pref: SelfCheckInUserCSS
+              type: textarea
+              class: code
+        -
+            - "Include the following JavaScript on all the self check-in screens:"
+            - pref: SelfCheckInUserJS
+              type: textarea
+              class: code
     Self Checkout:
         -
             - "Include the following JavaScript on all pages in the web-based self checkout:"

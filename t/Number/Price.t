@@ -1,6 +1,6 @@
 use Modern::Perl;
 
-use Test::More tests => 31;
+use Test::More tests => 32;
 
 use Test::MockModule;
 use t::lib::Mocks;
@@ -18,7 +18,6 @@ use_ok('Koha::Number::Price');
 my $orig_locale = setlocale(LC_NUMERIC);
 my $format = {
     p_cs_precedes => 1, # Force to place the symbol at the beginning
-    p_sep_by_space => 0, # Force to not add a space between the symbol and the number
 };
 t::lib::Mocks::mock_preference( 'CurrencyFormat', 'US' );
 $currency = Koha::Acquisition::Currency->new({
@@ -26,6 +25,7 @@ $currency = Koha::Acquisition::Currency->new({
     symbol   => '$',
     rate     => 1,
     active   => 1,
+    p_sep_by_space => 0, # Force to not add a space between the symbol and the number. This is the default behaviour
 });
 
 is( Koha::Number::Price->new->format( $format ),    '0.00', 'US: format 0' );
@@ -35,16 +35,19 @@ is( Koha::Number::Price->new(1234567890)->format( $format ),
 
 is( Koha::Number::Price->new(100000000000000)->format, '100000000000000', 'Numbers too big are not formatted');
 
-# FIXME This should be display symbol, but it was the case before the creation of this module
 is( Koha::Number::Price->new->format( { %$format, with_symbol => 1 } ),
-    '0.00', 'US: format 0 with symbol' );
+    '$0.00', 'US: format 0 with symbol' );
 is( Koha::Number::Price->new(3)->format( { %$format, with_symbol => 1 } ),
-    '3.00', 'US: format 3 with symbol' );
+    '$3.00', 'US: format 3 with symbol' );
 is(
     Koha::Number::Price->new(1234567890)
       ->format( { %$format, with_symbol => 1 }, 'US: format 1234567890 with symbol' ),
-    '1,234,567,890.00'
+    '$1,234,567,890.00'
 );
+
+$currency->p_sep_by_space(1);
+is( Koha::Number::Price->new(3)->format( { %$format, with_symbol => 1 } ),
+    '$ 3.00', 'US: format 3 with symbol and a space' );
 
 is( Koha::Number::Price->new->unformat,    '0', 'US: unformat 0' );
 is( Koha::Number::Price->new(3)->unformat, '3', 'US: unformat 3' );
@@ -60,7 +63,7 @@ SKIP: {
         unless $current_locale eq 'fr_FR.UTF-8';
 
     is( Koha::Number::Price->new(12345678.9)->format( { %$format, with_symbol => 1 } ),
-        '12,345,678.90', 'US: format 12,345,678.90 with symbol' );
+        '$ 12,345,678.90', 'US: format 12,345,678.90 with symbol' );
     is( Koha::Number::Price->new('12,345,678.90')->unformat,
         '12345678.9', 'US: unformat 12345678.9' );
     setlocale(LC_NUMERIC, $orig_locale);

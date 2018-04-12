@@ -1,4 +1,4 @@
-package Koha::REST::V1::Patron;
+package Koha::ClassSortRules;
 
 # This file is part of Koha.
 #
@@ -17,29 +17,42 @@ package Koha::REST::V1::Patron;
 
 use Modern::Perl;
 
-use Mojo::Base 'Mojolicious::Controller';
+use Carp;
 
-use Koha::Patrons;
+use Koha::Database;
 
-sub list {
-    my $c = shift->openapi->valid_input or return;
+use Koha::ClassSortRule;
 
-    # FIXME The limited does not work here, the userenv is not set
-    my $patrons = Koha::Patrons->search_limited;
+use base qw(Koha::Objects);
 
-    return $c->render(status => 200, openapi => $patrons);
+=head1 NAME
+
+Koha::ClassSortRules - Koha Classification Sort Rules Object set class
+
+=head1 API
+
+=head2 Class Methods
+
+=cut
+
+=head3 _type
+
+Returns name of corresponding DBIC resultset
+
+=cut
+
+sub _type {
+    return 'ClassSortRule';
 }
 
-sub get {
-    my $c = shift->openapi->valid_input or return;
+=head3 object_class
 
-    my $borrowernumber = $c->validation->param('borrowernumber');
-    my $patron = Koha::Patrons->find($borrowernumber);
-    unless ($patron) {
-        return $c->render(status => 404, openapi => { error => "Patron not found." });
-    }
+Returns name of corresponding Koha object class
 
-    return $c->render(status => 200, openapi => $patron);
+=cut
+
+sub object_class {
+    return 'Koha::ClassSortRule';
 }
 
 1;

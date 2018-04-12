@@ -74,13 +74,9 @@ if ( C4::Context->preference('NorwegianPatronDBEnable') && C4::Context->preferen
     }
 }
 
-my $issues = GetPendingIssues($member);     # FIXME: wasteful call when really, we only want the count
-my $countissues = scalar(@$issues);
-
-my $flags = C4::Members::patronflags( $patron->unblessed );
+my $charges = $patron->account->non_issues_charges;
+my $countissues = $patron->checkouts->count;
 my $userenv = C4::Context->userenv;
-
- 
 
 if ($patron->category->category_type eq "S") {
     unless(C4::Auth::haspermission($userenv->{'id'},{'staffaccess'=>1})) {
@@ -107,7 +103,7 @@ if (C4::Context->preference("IndependentBranches")) {
 my $op = $input->param('op') || 'delete_confirm';
 my $dbh = C4::Context->dbh;
 my $is_guarantor = $dbh->selectrow_array("SELECT COUNT(*) FROM borrowers WHERE guarantorid=?", undef, $member);
-if ( $op eq 'delete_confirm' or $countissues > 0 or $flags->{'CHARGES'}  or $is_guarantor or $deletelocal == 0) {
+if ( $op eq 'delete_confirm' or $countissues > 0 or $charges or $is_guarantor or $deletelocal == 0) {
 
     $template->param(
         patron => $patron,
@@ -115,8 +111,8 @@ if ( $op eq 'delete_confirm' or $countissues > 0 or $flags->{'CHARGES'}  or $is_
     if ($countissues >0) {
         $template->param(ItemsOnIssues => $countissues);
     }
-    if ($flags->{'CHARGES'} ne '') {
-        $template->param(charges => $flags->{'CHARGES'}->{'amount'});
+    if ( $charges > 0 ) {
+        $template->param(charges => $charges);
     }
     if ($is_guarantor) {
         $template->param(guarantees => 1);
@@ -125,7 +121,7 @@ if ( $op eq 'delete_confirm' or $countissues > 0 or $flags->{'CHARGES'}  or $is_
         $template->param(keeplocal => 1);
     }
     # This is silly written but reflect the same conditions as above
-    if ( not $countissues > 0 and not $flags->{CHARGES} ne '' and not $is_guarantor and not $deletelocal == 0 ) {
+    if ( not $countissues > 0 and not $charges and not $is_guarantor and not $deletelocal == 0 ) {
         $template->param(
             op         => 'delete_confirm',
             csrf_token => Koha::Token->new->generate_csrf({ session_id => scalar $input->cookie('CGISESSID') }),

@@ -208,9 +208,13 @@ sub GetRecords {
     foreach my $biblionumber ( split( / /, $cgi->param('id') ) ) {
 
         # Get the biblioitem from the biblionumber
-        my $biblioitem = ( GetBiblioItemByBiblioNumber( $biblionumber, undef ) )[0];
-        if ( not $biblioitem->{'biblionumber'} ) {
+        my $biblio = Koha::Biblios->find( $biblionumber );
+        my $biblioitem = $biblio->biblioitem;
+        if ( $biblioitem ) {
+            $biblioitem = $biblioitem->unblessed;
+        } else {
             $biblioitem->{code} = "RecordNotFound";
+            # FIXME We should not need to process something else; next?
         }
 
         my $embed_items = 1;
@@ -223,7 +227,6 @@ sub GetRecords {
 
         # Get most of the needed data
         my $biblioitemnumber = $biblioitem->{'biblioitemnumber'};
-        my $biblio = Koha::Biblios->find( $biblionumber );
         my $holds  = $biblio->current_holds->unblessed;
         my $issues           = GetBiblioIssues($biblionumber);
         my $items            = GetItemsByBiblioitemnumber($biblioitemnumber);
@@ -393,8 +396,7 @@ sub GetPatronInfo {
 
     # Cleaning the borrower hashref
     my $borrower = $patron->unblessed;
-    my $flags = C4::Members::patronflags( $borrower );
-    $borrower->{'charges'} = $flags->{'CHARGES'}->{'amount'};
+    $borrower->{charges} = sprintf "%.02f", $patron->account->non_issues_charges; # FIXME Formatting should not be done here
     my $library = Koha::Libraries->find( $borrower->{branchcode} );
     $borrower->{'branchname'} = $library ? $library->branchname : '';
     delete $borrower->{'userid'};
@@ -463,12 +465,14 @@ sub GetPatronInfo {
 
     # Issues management
     if ( $cgi->param('show_loans') && $cgi->param('show_loans') eq "1" ) {
-        my $issues = GetPendingIssues($borrowernumber);
-        foreach my $issue ( @$issues ){
-            $issue->{'issuedate'} = $issue->{'issuedate'}->strftime('%Y-%m-%d %H:%M');
-            $issue->{'date_due'} = $issue->{'date_due'}->strftime('%Y-%m-%d %H:%M');
+        my $pending_checkouts = $patron->pending_checkouts;
+        my @checkouts;
+        while ( my $c = $pending_checkouts->next ) {
+            # FIXME We should only retrieve what is needed in the template
+            my $issue = $c->unblessed_all_relateds;
+            push @checkouts, $issue
         }
-        $borrower->{'loans'}->{'loan'} = $issues;
+        $borrower->{'loans'}->{'loan'} = \@checkouts;
     }
 
     if ( $cgi->param('show_attributes') eq "1" ) {

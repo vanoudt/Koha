@@ -320,9 +320,6 @@ if ( $op eq 'do' ) {
                 };
                 push @errors, { error => $@ } if $@;
             } else {
-                # Attribute's value is empty, we don't want to modify it
-                ++$i and next if not $attribute->{attribute};
-
                 eval {
                     C4::Members::Attributes::UpdateBorrowerAttribute( $borrowernumber, $attribute );
                 };
@@ -339,8 +336,9 @@ if ( $op eq 'do' ) {
     for my $borrowernumber ( @borrowernumbers ) {
         my $patron = Koha::Patrons->find( $borrowernumber );
         if ( $patron ) {
+            my $category_description = $patron->category->description;
             $patron = $patron->unblessed;
-            $patron->{category_description} = $patron->category->description;
+            $patron->{category_description} = $category_description;
             $patron->{patron_attributes} = C4::Members::Attributes::GetBorrowerAttributes( $patron->{borrowernumber} );
             $max_nb_attr = scalar( @{ $patron->{patron_attributes} } )
                 if scalar( @{ $patron->{patron_attributes} } ) > $max_nb_attr;

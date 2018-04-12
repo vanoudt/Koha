@@ -15,6 +15,8 @@ use Carp;
 use Sys::Syslog qw(syslog);
 use Data::Dumper;
 
+use C4::SIP::Sip qw(add_field);
+
 use C4::Debug;
 use C4::Context;
 use C4::Koha;
@@ -28,22 +30,26 @@ use Koha::Patrons;
 
 our $kp;    # koha patron
 
+=head1 Methods
+
+=cut
+
 sub new {
     my ($class, $patron_id) = @_;
     my $type = ref($class) || $class;
     my $self;
-    $kp = Koha::Patrons->find( { cardnumber => $patron_id } )
-      or Koha::Patrons->find( { userid => $patron_id } );
-    $debug and warn "new Patron: " . Dumper($kp->unblessed) if $kp;
-    unless ($kp) {
+    my $patron = Koha::Patrons->find( { cardnumber => $patron_id } )
+      || Koha::Patrons->find( { userid => $patron_id } );
+    $debug and warn "new Patron: " . Dumper($patron->unblessed) if $patron;
+    unless ($patron) {
         syslog("LOG_DEBUG", "new ILS::Patron(%s): no such patron", $patron_id);
         return;
     }
-    $kp = $kp->unblessed;
+    $kp = $patron->unblessed;
     my $pw        = $kp->{password};
     my $flags     = C4::Members::patronflags( $kp );
-    my $debarred  = defined($flags->{DBARRED});
-    $debug and warn sprintf("Debarred = %s : ", ($debarred||'undef')) . Dumper(%$flags);
+    my $debarred  = $patron->is_debarred;
+    $debug and warn sprintf("Debarred = %s : ", ($debarred||'undef')); # Do we need more debug info here?
     my ($day, $month, $year) = (localtime)[3,4,5];
     my $today    = sprintf '%04d-%02d-%02d', $year+1900, $month+1, $day;
     my $expired  = ($today gt $kp->{dateexpiry}) ? 1 : 0;
@@ -59,7 +65,7 @@ sub new {
     $dob and $dob =~ s/-//g;    # YYYYMMDD
     my $dexpiry     = $kp->{dateexpiry};
     $dexpiry and $dexpiry =~ s/-//g;    # YYYYMMDD
-    my $fines_amount = $flags->{CHARGES}->{amount};
+    my $fines_amount = $patron->account->balance;
     $fines_amount = ($fines_amount and $fines_amount > 0) ? $fines_amount : 0;
     my $fee_limit = _fee_limit();
     my $fine_blocked = $fines_amount > $fee_limit;
@@ -67,7 +73,6 @@ sub new {
     {
     no warnings;    # any of these $kp->{fields} being concat'd could be undef
     %ilspatron = (
-        getmemberdetails_object => $kp,
         name => $kp->{firstname} . " " . $kp->{surname},
         id   => $kp->{cardnumber},    # to SIP, the id is the BARCODE, not userid
         password        => $pw,
@@ -88,7 +93,7 @@ sub new {
         hold_ok         => ( !$debarred && !$expired && !$fine_blocked),
         card_lost       => ( $kp->{lost} || $kp->{gonenoaddress} || $flags->{LOST} ),
         claims_returned => 0,
-        fines           => $fines_amount, # GetMemberAccountRecords($kp->{borrowernumber})
+        fines           => $fines_amount,
         fees            => 0,             # currently not distinct from fines
         recall_overdue  => 0,
         items_billed    => 0,
@@ -107,6 +112,10 @@ sub new {
     );
     }
     $debug and warn "patron fines: $ilspatron{fines} ... amountoutstanding: $kp->{amountoutstanding} ... CHARGES->amount: $flags->{CHARGES}->{amount}";
+
+    if ( $patron->is_debarred and $patron->debarredcomment ) {
+        $ilspatron{screen_msg} .= " -- " . $patron->debarredcomment;
+    }
     for (qw(EXPIRED CHARGES CREDITS GNA LOST DBARRED NOTES)) {
         ($flags->{$_}) or next;
         if ($_ ne 'NOTES' and $flags->{$_}->{message}) {
@@ -121,7 +130,7 @@ sub new {
 
     # FIXME: populate fine_items recall_items
     $ilspatron{unavail_holds} = _get_outstanding_holds($kp->{borrowernumber});
-    $ilspatron{items} = GetPendingIssues($kp->{borrowernumber});
+    $ilspatron{items} = $patron->pending_checkouts->unblessed;
     $self = \%ilspatron;
     $debug and warn Dumper($self);
     syslog("LOG_DEBUG", "new ILS::Patron(%s): found patron '%s'", $patron_id,$self->{id});
@@ -164,7 +173,6 @@ my %fields = (
     recall_overdue          => 0,   # for patron_status[12]
     too_many_billed         => 0,   # for patron_status[13]
     inet                    => 0,   # EnvisionWare extension
-    getmemberdetails_object => 0,
 );
 
 our $AUTOLOAD;
@@ -433,6 +441,21 @@ sub charge_denied {
     return "Please contact library staff";
 }
 
+=head2 update_lastseen
+
+    $patron->update_lastseen();
+
+    Patron method to update lastseen field in borrower
+    to record that patron has been seen via sip connection
+
+=cut
+
+sub update_lastseen {
+    my $self = shift;
+    my $kohaobj = Koha::Patrons->find( $self->{borrowernumber} );
+    $kohaobj->track_login if $kohaobj; # track_login checks the pref
+}
+
 sub _get_address {
     my $patron = shift;
 
@@ -472,6 +495,42 @@ sub _get_outstanding_holds {
         push @holds, $unblessed_hold;
     }
     return \@holds;
+}
+
+=head2 build_patron_attributes_string
+
+This method builds the part of the sip message for extended patron
+attributes as defined in the sip config
+
+=cut
+
+sub build_patron_attributes_string {
+    my ( $self, $server ) = @_;
+
+    my $string = q{};
+
+    if ( $server->{account}->{patron_attribute} ) {
+        my @attributes_to_send =
+          ref $server->{account}->{patron_attribute} eq "ARRAY"
+          ? @{ $server->{account}->{patron_attribute} }
+          : ( $server->{account}->{patron_attribute} );
+
+        foreach my $a ( @attributes_to_send ) {
+            my @attributes = Koha::Patron::Attributes->search(
+                {
+                    borrowernumber => $self->{borrowernumber},
+                    code           => $a->{code}
+                }
+            );
+
+            foreach my $attribute ( @attributes ) {
+                my $value = $attribute->attribute();
+                $string .= add_field( $a->{field}, $value );
+            }
+        }
+    }
+
+    return $string;
 }
 
 1;

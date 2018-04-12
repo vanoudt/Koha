@@ -118,8 +118,7 @@ if ( $input->param('add_debarment') ) {
     my $expiration = $input->param('debarred_expiration');
     $expiration =
       $expiration
-      ? output_pref(
-        { 'dt' => dt_from_string($expiration), 'dateformat' => 'iso' } )
+      ? dt_from_string($expiration)->ymd
       : undef;
 
     AddDebarment(
@@ -277,7 +276,7 @@ $newdata{'lang'}    = $input->param('lang')    if defined($input->param('lang'))
 
 # builds default userid
 # userid input text may be empty or missing because of syspref BorrowerUnwantedField
-if ( ( defined $newdata{'userid'} && $newdata{'userid'} eq '' ) || $check_BorrowerUnwantedField =~ /userid/ ) {
+if ( ( defined $newdata{'userid'} && $newdata{'userid'} eq '' ) || $check_BorrowerUnwantedField =~ /userid/ && !defined $data{'userid'} ) {
     if ( ( defined $newdata{'firstname'} ) && ( defined $newdata{'surname'} ) ) {
         # Full page edit, firstname and surname input zones are present
         $newdata{'userid'} = Generate_Userid( $borrowernumber, $newdata{'firstname'}, $newdata{'surname'} );

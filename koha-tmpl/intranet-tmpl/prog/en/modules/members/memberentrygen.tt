@@ -1157,6 +1157,7 @@
 [% MACRO jsinclude BLOCK %]
     <script type="text/javascript" src="[% interface %]/lib/jquery/plugins/jquery.fixFloat_[% KOHA_VERSION %].js"></script>
     [% INCLUDE 'calendar.inc' %]
+    <script type="text/javascript" src="[% interface %]/[% theme %]/js/members-menu_[% KOHA_VERSION %].js"></script>
     <script type="text/javascript">
         $(document).ready(function() {
 
@@ -1242,20 +1243,6 @@
                     $('#saverecord').click();
                 }
                 else {return false;}
-            });
-
-            $("#entryform").validate({
-                rules: {
-                    password: {
-                        required: true,
-                        password_strong: true,
-                        password_no_spaces: true
-                    },
-                    password2: {
-                        required: true,
-                        password_match: true
-                    }
-                }
             });
 
             $("#saverecord").click(function(){

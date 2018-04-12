@@ -73,14 +73,17 @@ if (C4::Context->preference('AutoSelfCheckAllowed'))
     $query->param(-name=>'koha_login_context',-values=>['sco']);
 }
 $query->param(-name=>'sco_user_login',-values=>[1]);
-my ($template, $loggedinuser, $cookie) = get_template_and_user({
-    template_name   => "sco/sco-main.tt",
-    authnotrequired => 0,
-    flagsrequired => { circulate => "self_checkout" },
-    query => $query,
-    type  => "opac",
-    debug => 1,
-});
+
+my ( $template, $loggedinuser, $cookie ) = get_template_and_user(
+    {
+        template_name   => "sco/sco-main.tt",
+        authnotrequired => 0,
+        flagsrequired   => { self_check => "self_checkout_module" },
+        query           => $query,
+        type            => "opac",
+        debug           => 1,
+    }
+);
 
 # Get the self checkout timeout preference, or use 120 seconds as a default
 my $selfchecktimeout = 120000;
@@ -118,11 +121,6 @@ my ( $borrower, $patron );
 if ( $patronid ) {
     $patron = Koha::Patrons->find( { cardnumber => $patronid } );
     $borrower = $patron->unblessed if $patron;
-}
-
-my $currencySymbol = "";
-if ( my $active_currency = Koha::Acquisition::Currencies->get_active ) {
-    $currencySymbol = $active_currency->symbol;
 }
 
 my $branch = $issuer->{branchcode};
@@ -169,7 +167,7 @@ elsif ( $patron and $op eq "checkout" ) {
             hide_main                 => 1,
         );
         if ($issue_error eq 'DEBT') {
-            $template->param(amount => $currencySymbol.$impossible->{DEBT});
+            $template->param(DEBT => $impossible->{DEBT});
         }
         #warn "issue_error: " . $issue_error ;
         if ( $issue_error eq "NO_MORE_RENEWALS" ) {
@@ -201,7 +199,7 @@ elsif ( $patron and $op eq "checkout" ) {
             hide_main                 => 1,
         );
         if ($issue_error eq 'DEBT') {
-            $template->param(amount => $currencySymbol.$needconfirm->{DEBT});
+            $template->param(DEBT => $needconfirm->{DEBT});
         }
     } else {
         if ( $confirmed || $issuenoconfirm ) {    # we'll want to call getpatroninfo again to get updated issues.
@@ -256,24 +254,25 @@ if ($borrower) {
 #   warn "issuer's  branchcode: " .   $issuer->{branchcode};
 #   warn   "user's  branchcode: " . $borrower->{branchcode};
     my $borrowername = sprintf "%s %s", ($borrower->{firstname} || ''), ($borrower->{surname} || '');
-    my @issues;
-    my ($issueslist) = GetPendingIssues( $borrower->{'borrowernumber'} );
-    foreach my $it (@$issueslist) {
+    my $pending_checkouts = $patron->pending_checkouts;
+    my @checkouts;
+    while ( my $c = $pending_checkouts->next ) {
+        my $checkout = $c->unblessed_all_relateds;
         my ($can_be_renewed, $renew_error) = CanBookBeRenewed(
             $borrower->{borrowernumber},
-            $it->{itemnumber},
+            $checkout->{itemnumber},
         );
-        $it->{can_be_renewed} = $can_be_renewed;
-        $it->{renew_error} = $renew_error;
-        $it->{date_due}  = $it->{date_due_sql};
-        push @issues, $it;
+        $checkout->{can_be_renewed} = $can_be_renewed; # In the future this will be $checkout->can_be_renewed
+        $checkout->{renew_error} = $renew_error;
+        $checkout->{overdue} = $c->is_overdue;
+        push @checkouts, $checkout;
     }
 
     $template->param(
         validuser => 1,
         borrowername => $borrowername,
-        issues_count => scalar(@issues),
-        ISSUES => \@issues,
+        issues_count => scalar(@checkouts),
+        ISSUES => \@checkouts,
         patronid => $patronid,
         patronlogin => $patronlogin,
         patronpw => $patronpw,

@@ -196,7 +196,7 @@
                                 [% ELSE %]
                                     <option value="se">Series</option>
                                 [% END # /ms_se %]
-                                [% IF ( numbersphr ) %]
+                                [% IF ( Koha.Preference('OPACNumbersPreferPhrase') ) %]
                                     [% IF ( ms_callnum ) %]
                                             <option selected="selected" value="callnum,phr">Call number</option>
                                     [% ELSE %]
@@ -208,7 +208,7 @@
                                     [% ELSE %]
                                         <option value="callnum">Call number</option>
                                     [% END # /ms_callnum %]
-                                [% END # /numbersphr %]
+                                [% END # /IF OPACNumbersPreferPhrase %]
                                 </select>
 
                                 [% UNLESS ( Koha.Preference( 'OpacAddMastheadLibraryPulldown' ) == 1 ) %]
@@ -323,9 +323,9 @@
                 <fieldset class="brief">
                     <label for="muserid">Login:</label><input type="text" id="muserid" name="userid" />
                     <label for="mpassword">Password:</label><input type="password" id="mpassword" name="password" />
-                    [% IF Koha.Preference( 'NoLoginInstructions' ) %]
+                    [% IF Koha.Preference( 'OpacLoginInstructions' ) %]
                         <div id="nologininstructions-modal" class="nologininstructions">
-                            [% Koha.Preference( 'NoLoginInstructions' ) %]
+                            [% Koha.Preference( 'OpacLoginInstructions' ) %]
                         </div>
                     [% END %]
                     [% IF Koha.Preference('OpacPasswordChange') && Koha.Preference('OpacResetPassword') %]

@@ -87,7 +87,7 @@ BEGIN {
         }
     }
     if ($cas) {
-        import C4::Auth_with_cas qw(check_api_auth_cas checkpw_cas login_cas logout_cas login_cas_url);
+        import C4::Auth_with_cas qw(check_api_auth_cas checkpw_cas login_cas logout_cas login_cas_url logout_if_required);
     }
 
 }
@@ -180,12 +180,40 @@ sub get_template_and_user {
         );
     }
 
+    if ( $in->{type} eq 'opac' && $user ) {
+        my $kick_out;
 
-    # If the user logged in is the SCO user and they try to go out of the SCO module, log the user out removing the CGISESSID cookie
-    if ( $in->{type} eq 'opac' and $in->{template_name} !~ m|sco/| ) {
-        if ( $user && C4::Context->preference('AutoSelfCheckID') && $user eq C4::Context->preference('AutoSelfCheckID') ) {
-            $template = C4::Templates::gettemplate( 'opac-auth.tt', 'opac', $in->{query} );
-            my $cookie = $in->{query}->cookie(
+        if (
+# If the user logged in is the SCO user and they try to go out of the SCO module,
+# log the user out removing the CGISESSID cookie
+               $in->{template_name} !~ m|sco/|
+            && C4::Context->preference('AutoSelfCheckID')
+            && $user eq C4::Context->preference('AutoSelfCheckID')
+          )
+        {
+            $kick_out = 1;
+        }
+        elsif (
+# If the user logged in is the SCI user and they try to go out of the SCI module,
+# kick them out unless it is SCO with a valid permission
+# or they are a superlibrarian
+               $in->{template_name} !~ m|sci/|
+            && haspermission( $user, { self_check => 'self_checkin_module' } )
+            && !(
+                $in->{template_name} =~ m|sco/| && haspermission(
+                    $user, { self_check => 'self_checkout_module' }
+                )
+            )
+            && $flags && $flags->{superlibrarian} != 1
+          )
+        {
+            $kick_out = 1;
+        }
+
+        if ($kick_out) {
+            $template = C4::Templates::gettemplate( 'opac-auth.tt', 'opac',
+                $in->{query} );
+            $cookie = $in->{query}->cookie(
                 -name     => 'CGISESSID',
                 -value    => '',
                 -expires  => '',
@@ -196,14 +224,16 @@ sub get_template_and_user {
                 loginprompt => 1,
                 script_name => get_script_name(),
             );
+
             print $in->{query}->header(
-                {   type              => 'text/html',
+                {
+                    type              => 'text/html',
                     charset           => 'utf-8',
                     cookie            => $cookie,
                     'X-Frame-Options' => 'SAMEORIGIN'
                 }
               ),
-            $template->output;
+              $template->output;
             safe_exit;
         }
     }
@@ -472,8 +502,7 @@ sub get_template_and_user {
             EnableBorrowerFiles                                                        => C4::Context->preference('EnableBorrowerFiles'),
             UseKohaPlugins                                                             => C4::Context->preference('UseKohaPlugins'),
             UseCourseReserves                                                          => C4::Context->preference("UseCourseReserves"),
-            useDischarge                                                               => C4::Context->preference('useDischarge'),
-            KOHA_VERSION                                                               => C4::Context->preference('Version'),
+            useDischarge                                                               => C4::Context->preference('useDischarge')
         );
     }
     else {
@@ -547,7 +576,6 @@ sub get_template_and_user {
             OpacTopissue                          => C4::Context->preference("OpacTopissue"),
             RequestOnOpac                         => C4::Context->preference("RequestOnOpac"),
             'Version'                             => C4::Context->preference('Version'),
-            KOHA_VERSION                          => C4::Context->preference('Version'),
             hidelostitems                         => C4::Context->preference("hidelostitems"),
             mylibraryfirst                        => ( C4::Context->preference("SearchMyLibraryFirst") && C4::Context->userenv ) ? C4::Context->userenv->{'branch'} : '',
             opaclayoutstylesheet                  => "" . C4::Context->preference("opaclayoutstylesheet"),
@@ -749,7 +777,6 @@ sub _timeout_syspref {
 sub checkauth {
     my $query = shift;
     $debug and warn "Checking Auth";
-
     # $authnotrequired will be set for scripts which will run without authentication
     my $authnotrequired = shift;
     my $flagsrequired   = shift;
@@ -769,7 +796,7 @@ sub checkauth {
     my $logout = $query->param('logout.x');
 
     my $anon_search_history;
-
+    my $cas_ticket = '';
     # This parameter is the name of the CAS server we want to authenticate against,
     # when using authentication against multiple CAS servers, as configured in Auth_cas_servers.yaml
     my $casparam = $query->param('cas');
@@ -908,7 +935,6 @@ sub checkauth {
         }
     }
     unless ( $userid || $sessionID ) {
-
         #we initiate a session prior to checking for a username to allow for anonymous sessions...
         my $session = get_session("") or die "Auth ERROR: Cannot get_session()";
 
@@ -939,7 +965,6 @@ sub checkauth {
         {
             my $password    = $query->param('password');
             my $shibSuccess = 0;
-
             my ( $return, $cardnumber );
 
             # If shib is enabled and we have a shib login, does the login match a valid koha user
@@ -957,7 +982,7 @@ sub checkauth {
             unless ($shibSuccess) {
                 if ( $cas && $query->param('ticket') ) {
                     my $retuserid;
-                    ( $return, $cardnumber, $retuserid ) =
+                    ( $return, $cardnumber, $retuserid, $cas_ticket ) =
                       checkpw( $dbh, $userid, $password, $query, $type );
                     $userid = $retuserid;
                     $info{'invalidCasLogin'} = 1 unless ($return);
@@ -1017,7 +1042,7 @@ sub checkauth {
                 }
                 else {
                     my $retuserid;
-                    ( $return, $cardnumber, $retuserid ) =
+                    ( $return, $cardnumber, $retuserid, $cas_ticket ) =
                       checkpw( $dbh, $q_userid, $password, $query, $type );
                     $userid = $retuserid if ($retuserid);
                     $info{'invalid_username_or_password'} = 1 unless ($return);
@@ -1143,6 +1168,7 @@ sub checkauth {
                     $session->param( 'ip',           $session->remote_addr() );
                     $session->param( 'lasttime',     time() );
                 }
+                $session->param('cas_ticket', $cas_ticket) if $cas_ticket;
                 C4::Context->set_userenv(
                     $session->param('number'),       $session->param('id'),
                     $session->param('cardnumber'),   $session->param('firstname'),
@@ -1265,11 +1291,11 @@ sub checkauth {
         PatronSelfRegistration                => C4::Context->preference("PatronSelfRegistration"),
         PatronSelfRegistrationDefaultCategory => C4::Context->preference("PatronSelfRegistrationDefaultCategory"),
         opac_css_override                     => $ENV{'OPAC_CSS_OVERRIDE'},
-        too_many_login_attempts               => ( $patron and $patron->account_locked ),
-        KOHA_VERSION                          => C4::Context->preference('Version'),
+        too_many_login_attempts               => ( $patron and $patron->account_locked )
     );
 
     $template->param( SCO_login => 1 ) if ( $query->param('sco_user_login') );
+    $template->param( SCI_login => 1 ) if ( $query->param('sci_user_login') );
     $template->param( OpacPublic => C4::Context->preference("OpacPublic") );
     $template->param( loginprompt => 1 ) unless $info{'nopermission'};
 
@@ -1375,9 +1401,9 @@ Possible return values in C<$status> are:
 =cut
 
 sub check_api_auth {
+
     my $query         = shift;
     my $flagsrequired = shift;
-
     my $dbh     = C4::Context->dbh;
     my $timeout = _timeout_syspref();
 
@@ -1471,7 +1497,7 @@ sub check_api_auth {
         # new login
         my $userid   = $query->param('userid');
         my $password = $query->param('password');
-        my ( $return, $cardnumber );
+        my ( $return, $cardnumber, $cas_ticket );
 
         # Proxy CAS auth
         if ( $cas && $query->param('PT') ) {
@@ -1480,7 +1506,7 @@ sub check_api_auth {
 
             # In case of a CAS authentication, we use the ticket instead of the password
             my $PT = $query->param('PT');
-            ( $return, $cardnumber, $userid ) = check_api_auth_cas( $dbh, $PT, $query );    # EXTERNAL AUTH
+            ( $return, $cardnumber, $userid, $cas_ticket ) = check_api_auth_cas( $dbh, $PT, $query );    # EXTERNAL AUTH
         } else {
 
             # User / password auth
@@ -1489,7 +1515,8 @@ sub check_api_auth {
                 # caller did something wrong, fail the authenticateion
                 return ( "failed", undef, undef );
             }
-            ( $return, $cardnumber ) = checkpw( $dbh, $userid, $password, $query );
+            my $newuserid;
+            ( $return, $cardnumber, $newuserid, $cas_ticket ) = checkpw( $dbh, $userid, $password, $query );
         }
 
         if ( $return and haspermission( $userid, $flagsrequired ) ) {
@@ -1587,6 +1614,7 @@ sub check_api_auth {
                 $session->param( 'ip',           $session->remote_addr() );
                 $session->param( 'lasttime',     time() );
             }
+            $session->param( 'cas_ticket', $cas_ticket);
             C4::Context->set_userenv(
                 $session->param('number'),       $session->param('id'),
                 $session->param('cardnumber'),   $session->param('firstname'),
@@ -1733,28 +1761,32 @@ will be created.
 
 =cut
 
-sub get_session {
-    my $sessionID      = shift;
+sub _get_session_params {
     my $storage_method = C4::Context->preference('SessionStorage');
-    my $dbh            = C4::Context->dbh;
-    my $session;
     if ( $storage_method eq 'mysql' ) {
-        $session = new CGI::Session( "driver:MySQL;serializer:yaml;id:md5", $sessionID, { Handle => $dbh } );
+        my $dbh = C4::Context->dbh;
+        return { dsn => "driver:MySQL;serializer:yaml;id:md5", dsn_args => { Handle => $dbh } };
     }
     elsif ( $storage_method eq 'Pg' ) {
-        $session = new CGI::Session( "driver:PostgreSQL;serializer:yaml;id:md5", $sessionID, { Handle => $dbh } );
+        my $dbh = C4::Context->dbh;
+        return { dsn => "driver:PostgreSQL;serializer:yaml;id:md5", dsn_args => { Handle => $dbh } };
     }
     elsif ( $storage_method eq 'memcached' && Koha::Caches->get_instance->memcached_cache ) {
         my $memcached = Koha::Caches->get_instance()->memcached_cache;
-        $session = new CGI::Session( "driver:memcached;serializer:yaml;id:md5", $sessionID, { Memcached => $memcached } );
+        return { dsn => "driver:memcached;serializer:yaml;id:md5", dsn_args => { Memcached => $memcached } };
     }
     else {
         # catch all defaults to tmp should work on all systems
         my $dir = File::Spec->tmpdir;
         my $instance = C4::Context->config( 'database' ); #actually for packages not exactly the instance name, but generally safer to leave it as it is
-        $session = new CGI::Session( "driver:File;serializer:yaml;id:md5", $sessionID, { Directory => "$dir/cgisess_$instance" } );
+        return { dsn => "driver:File;serializer:yaml;id:md5", dsn_args => { Directory => "$dir/cgisess_$instance" } };
     }
-    return $session;
+}
+
+sub get_session {
+    my $sessionID      = shift;
+    my $params = _get_session_params();
+    return new CGI::Session( $params->{dsn}, $sessionID, $params->{dsn_args} );
 }
 
 
@@ -1793,9 +1825,11 @@ sub checkpw {
         # In case of a CAS authentication, we use the ticket instead of the password
         my $ticket = $query->param('ticket');
         $query->delete('ticket');                                   # remove ticket to come back to original URL
-        my ( $retval, $retcard, $retuserid ) = checkpw_cas( $dbh, $ticket, $query, $type );    # EXTERNAL AUTH
+        my ( $retval, $retcard, $retuserid, $cas_ticket ) = checkpw_cas( $dbh, $ticket, $query, $type );    # EXTERNAL AUTH
         if ( $retval ) {
-            @return = ( $retval, $retcard, $retuserid );
+            @return = ( $retval, $retcard, $retuserid, $cas_ticket );
+        } else {
+            @return = (0);
         }
         $passwd_ok = $retval;
     }

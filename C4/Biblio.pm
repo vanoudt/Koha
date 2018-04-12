@@ -67,9 +67,6 @@ BEGIN {
     push @EXPORT, qw(
       GetBiblioData
       GetMarcBiblio
-      GetBiblioItemData
-      GetBiblioItemInfosOf
-      GetBiblioItemByBiblioNumber
 
       &GetRecordValue
 
@@ -722,57 +719,6 @@ sub GetBiblioData {
     return ($data);
 }    # sub GetBiblioData
 
-=head2 GetBiblioItemData
-
-  $itemdata = &GetBiblioItemData($biblioitemnumber);
-
-Looks up the biblioitem with the given biblioitemnumber. Returns a
-reference-to-hash. The keys are the fields from the C<biblio>,
-C<biblioitems>, and C<itemtypes> tables in the Koha database, except
-that C<biblioitems.notes> is given as C<$itemdata-E<gt>{bnotes}>.
-
-=cut
-
-sub GetBiblioItemData {
-    my ($biblioitemnumber) = @_;
-    my $dbh                = C4::Context->dbh;
-    my $query              = "SELECT *,biblioitems.notes AS bnotes
-        FROM biblio LEFT JOIN biblioitems on biblio.biblionumber=biblioitems.biblionumber ";
-    unless ( C4::Context->preference('item-level_itypes') ) {
-        $query .= "LEFT JOIN itemtypes on biblioitems.itemtype=itemtypes.itemtype ";
-    }
-    $query .= " WHERE biblioitemnumber = ? ";
-    my $sth = $dbh->prepare($query);
-    my $data;
-    $sth->execute($biblioitemnumber);
-    $data = $sth->fetchrow_hashref;
-    $sth->finish;
-    return ($data);
-}    # sub &GetBiblioItemData
-
-=head2 GetBiblioItemByBiblioNumber
-
-NOTE : This function has been copy/paste from C4/Biblio.pm from head before zebra integration.
-
-=cut
-
-sub GetBiblioItemByBiblioNumber {
-    my ($biblionumber) = @_;
-    my $dbh            = C4::Context->dbh;
-    my $sth            = $dbh->prepare("Select * FROM biblioitems WHERE biblionumber = ?");
-    my $count          = 0;
-    my @results;
-
-    $sth->execute($biblionumber);
-
-    while ( my $data = $sth->fetchrow_hashref ) {
-        push @results, $data;
-    }
-
-    $sth->finish;
-    return @results;
-}
-
 =head2 GetISBDView 
 
   $isbd = &GetISBDView({
@@ -907,28 +853,6 @@ sub GetISBDView {
     $res =~ s/\(\)//g;
 
     return $res;
-}
-
-=head2 GetBiblioItemInfosOf
-
-  GetBiblioItemInfosOf(@biblioitemnumbers);
-
-=cut
-
-sub GetBiblioItemInfosOf {
-    my @biblioitemnumbers = @_;
-
-    my $biblioitemnumber_values = @biblioitemnumbers ? join( ',', @biblioitemnumbers ) : "''";
-
-    my $dbh = C4::Context->dbh;
-    my $query = "
-        SELECT biblioitemnumber,
-            publicationyear,
-            itemtype
-        FROM biblioitems
-        WHERE biblioitemnumber IN ($biblioitemnumber_values)
-    ";
-    return $dbh->selectall_hashref($query, 'biblioitemnumber');
 }
 
 =head1 FUNCTIONS FOR HANDLING MARC MANAGEMENT
@@ -2339,6 +2263,7 @@ sub TransformHtmlToXml {
     my $prevtag = -1;
     my $first   = 1;
     my $j       = -1;
+    my $close_last_tag;
     for ( my $i = 0 ; $i < @$tags ; $i++ ) {
 
         if ( C4::Context->preference('marcflavour') eq 'UNIMARC' and @$tags[$i] eq "100" and @$subfields[$i] eq "a" ) {
@@ -2359,6 +2284,7 @@ sub TransformHtmlToXml {
         @$values[$i] =~ s/'/&apos;/g;
 
         if ( ( @$tags[$i] ne $prevtag ) ) {
+            $close_last_tag = 0;
             $j++ unless ( @$tags[$i] eq "" );
             my $indicator1 = eval { substr( @$indicator[$j], 0, 1 ) };
             my $indicator2 = eval { substr( @$indicator[$j], 1, 1 ) };
@@ -2377,6 +2303,7 @@ sub TransformHtmlToXml {
                     $xml .= "<datafield tag=\"@$tags[$i]\" ind1=\"$ind1\" ind2=\"$ind2\">\n";
                     $xml .= "<subfield code=\"@$subfields[$i]\">@$values[$i]</subfield>\n";
                     $first = 0;
+                    $close_last_tag = 1;
                 } else {
                     $first = 1;
                 }
@@ -2396,6 +2323,7 @@ sub TransformHtmlToXml {
                         $xml .= "<datafield tag=\"@$tags[$i]\" ind1=\"$ind1\" ind2=\"$ind2\">\n";
                         $xml .= "<subfield code=\"@$subfields[$i]\">@$values[$i]</subfield>\n";
                         $first = 0;
+                        $close_last_tag = 1;
                     }
                 }
             }
@@ -2415,13 +2343,14 @@ sub TransformHtmlToXml {
                 if ($first) {
                     $xml .= "<datafield tag=\"@$tags[$i]\" ind1=\"$ind1\" ind2=\"$ind2\">\n";
                     $first = 0;
+                    $close_last_tag = 1;
                 }
                 $xml .= "<subfield code=\"@$subfields[$i]\">@$values[$i]</subfield>\n";
             }
         }
         $prevtag = @$tags[$i];
     }
-    $xml .= "</datafield>\n" if $xml =~ m/<datafield/;
+    $xml .= "</datafield>\n" if $close_last_tag;
     if ( C4::Context->preference('marcflavour') eq 'UNIMARC' and !$unimarc_and_100_exist ) {
 
         #     warn "SETTING 100 for $auth_type";

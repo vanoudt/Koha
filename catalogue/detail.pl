@@ -30,7 +30,7 @@ use C4::Items;
 use C4::Circulation;
 use C4::Reserves;
 use C4::Serials;
-use C4::XISBN qw(get_xisbns get_biblionumber_from_isbn);
+use C4::XISBN qw(get_xisbns);
 use C4::External::Amazon;
 use C4::Search;		# enabled_staff_search_views
 use C4::Tags qw(get_tags);
@@ -203,16 +203,20 @@ my $copynumbers =
 my (@itemloop, @otheritemloop, %itemfields);
 my $norequests = 1;
 
-my $mss = Koha::MarcSubfieldStructures->search({ frameworkcode => $fw, kohafield => 'items.itemlost', authorised_value => { not => undef } });
+my $mss = Koha::MarcSubfieldStructures->search({ frameworkcode => $fw, kohafield => 'items.itemlost', authorised_value => [ -and => {'!=' => undef }, {'!=' => ''}] });
 if ( $mss->count ) {
     $template->param( itemlostloop => GetAuthorisedValues( $mss->next->authorised_value ) );
 }
-$mss = Koha::MarcSubfieldStructures->search({ frameworkcode => $fw, kohafield => 'items.damaged', authorised_value => { not => undef } });
+$mss = Koha::MarcSubfieldStructures->search({ frameworkcode => $fw, kohafield => 'items.damaged', authorised_value => [ -and => {'!=' => undef }, {'!=' => ''}] });
 if ( $mss->count ) {
     $template->param( itemdamagedloop => GetAuthorisedValues( $mss->next->authorised_value ) );
 }
+$mss = Koha::MarcSubfieldStructures->search({ frameworkcode => $fw, kohafield => 'items.withdrawn', authorised_value => { not => undef } });
+if ( $mss->count ) {
+    $template->param( itemwithdrawnloop => GetAuthorisedValues( $mss->next->authorised_value) );
+}
 
-$mss = Koha::MarcSubfieldStructures->search({ frameworkcode => $fw, kohafield => 'items.materials', authorised_value => { not => undef } });
+$mss = Koha::MarcSubfieldStructures->search({ frameworkcode => $fw, kohafield => 'items.materials', authorised_value => [ -and => {'!=' => undef }, {'!=' => ''}] });
 my %materials_map;
 if ($mss->count) {
     my $materials_authvals = GetAuthorisedValues($mss->next->authorised_value);

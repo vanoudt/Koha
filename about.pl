@@ -23,6 +23,7 @@
 use Modern::Perl;
 
 use CGI qw ( -utf8 );
+use DateTime::TimeZone;
 use List::MoreUtils qw/ any /;
 use LWP::Simple;
 use XML::Simple;
@@ -36,6 +37,7 @@ use C4::Context;
 use C4::Installer;
 
 use Koha;
+use Koha::DateUtils qw(dt_from_string output_pref);
 use Koha::Acquisition::Currencies;
 use Koha::Patron::Categories;
 use Koha::Patrons;
@@ -59,6 +61,38 @@ my ( $template, $loggedinuser, $cookie ) = get_template_and_user(
         flagsrequired   => { catalogue => 1 },
         debug           => 1,
     }
+);
+
+my $config_timezone = C4::Context->config('timezone') // '';
+my $config_invalid  = !DateTime::TimeZone->is_valid_name( $config_timezone );
+my $env_timezone    = $ENV{TZ} // '';
+my $env_invalid     = !DateTime::TimeZone->is_valid_name( $env_timezone );
+my $actual_bad_tz_fallback = 0;
+
+if ( $config_timezone ne '' &&
+     $config_invalid ) {
+    # Bad config
+    $actual_bad_tz_fallback = 1;
+}
+elsif ( $config_timezone eq '' &&
+        $env_timezone    ne '' &&
+        $env_invalid ) {
+    # No config, but bad ENV{TZ}
+    $actual_bad_tz_fallback = 1;
+}
+
+my $time_zone = {
+    actual                 => C4::Context->tz->name,
+    actual_bad_tz_fallback => $actual_bad_tz_fallback,
+    config                 => $config_timezone,
+    config_invalid         => $config_invalid,
+    environment            => $env_timezone,
+    environment_invalid    => $env_invalid
+};
+
+$template->param(
+    time_zone              => $time_zone,
+    current_date_and_time  => output_pref({ dt => dt_from_string(), dateformat => 'iso' })
 );
 
 my $perl_path = $^X;
@@ -365,9 +399,9 @@ if (  C4::Context->preference('WebBasedSelfCheck')
     my $all_permissions = C4::Auth::get_user_subpermissions( $userid );
     my ( $has_self_checkout_perm, $has_other_permissions );
     while ( my ( $module, $permissions ) = each %$all_permissions ) {
-        if ( $module eq 'circulate' ) {
+        if ( $module eq 'self_check' ) {
             while ( my ( $permission, $flag ) = each %$permissions ) {
-                if ( $permission eq 'self_checkout' ) {
+                if ( $permission eq 'self_checkout_module' ) {
                     $has_self_checkout_perm = 1;
                 } else {
                     $has_other_permissions = 1;

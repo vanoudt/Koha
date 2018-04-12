@@ -458,6 +458,7 @@ CREATE TABLE `currency` (
   `rate` float(15,5) default NULL,
   `active` tinyint(1) default NULL,
   `archived` tinyint(1) DEFAULT 0,
+  `p_sep_by_space` tinyint(1) DEFAULT 0,
   PRIMARY KEY  (`currency`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -836,6 +837,7 @@ CREATE TABLE `issuingrules` ( -- circulation and fine rules
   `fine` decimal(28,6) default NULL, -- fine amount
   `finedays` int(11) default NULL, -- suspension in days
   `maxsuspensiondays` int(11) default NULL, -- max suspension days
+  `suspension_chargeperiod` int(11) default '1', -- how often the finedays is charged
   `firstremind` int(11) default NULL, -- fine grace period
   `chargeperiod` int(11) default NULL, -- how often the fine amount is charged
   `chargeperiod_charge_at` tinyint(1) NOT NULL DEFAULT '0', -- Should fine be given at the start ( 1 ) or the end ( 0 ) of the period

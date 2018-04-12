@@ -32,7 +32,7 @@ use C4::Biblio;
 use C4::Items;
 use C4::Circulation;
 use C4::Tags qw(get_tags);
-use C4::XISBN qw(get_xisbns get_biblionumber_from_isbn);
+use C4::XISBN qw(get_xisbns);
 use C4::External::Amazon;
 use C4::External::Syndetics qw(get_syndetics_index get_syndetics_summary get_syndetics_toc get_syndetics_excerpt get_syndetics_reviews get_syndetics_anotes );
 use C4::Members;
@@ -200,6 +200,7 @@ if ($session->param('busc')) {
                 }
             } else {
                 for my $value (@{$arrParamsBusc->{$_}}) {
+                    next if !defined($value);
                     $pasarParams .= '&amp;' if ($j);
                     $pasarParams .= $_ . '=' . Encode::decode('UTF-8', uri_escape_utf8($value));
                     $j++;

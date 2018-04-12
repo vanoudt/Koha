@@ -28,17 +28,20 @@ use C4::Circulation;
 use C4::Output;
 use C4::Koha;
 use C4::Auth;
-use C4::Biblio; # GetBiblioItemData
+use Koha::Biblios;
 use Koha::DateUtils;
 use Koha::Libraries;
 
 my $input        = new CGI;
 my $itm          = $input->param('itm');
-my $bi           = $input->param('bi');
 my $biblionumber = $input->param('biblionumber');
 
-my $idata = itemdatanum($itm);
-my $data  = GetBiblioItemData($bi);
+my $biblio = Koha::Biblios->find( $biblionumber );
+my $item   = Koha::Items->find( $itm );
+
+if ( !defined $biblio or !defined $item ) {
+    print $input->redirect("/cgi-bin/koha/errors/400.pl");
+}
 
 my $lastmove = lastmove($itm);
 
@@ -73,12 +76,11 @@ for my $library ( @$libraries ) {
 
 $template->param(
     biblionumber            => $biblionumber,
-    title                   => $data->{'title'},
-    author                  => $data->{'author'},
-    barcode                 => $idata->{'barcode'},
-    biblioitemnumber        => $bi,
-    homebranch              => $idata->{homebranch},
-    holdingbranch           => $idata->{holdingbranch},
+    title                   => $biblio->title,
+    author                  => $biblio->author,
+    barcode                 => $item->barcode,
+    homebranch              => $item->homebranch,
+    holdingbranch           => $item->holdingbranch,
     lastdate                => $lastdate ? $lastdate : 0,
     count                   => $count,
     libraries               => $libraries,
@@ -86,13 +88,6 @@ $template->param(
 
 output_html_with_http_headers $input, $cookie, $template->output;
 exit;
-
-sub itemdatanum {
-    my ($itemnumber) = @_;
-    my $sth = C4::Context->dbh->prepare("SELECT * FROM items WHERE itemnumber=?");
-    $sth->execute($itemnumber);
-    return $sth->fetchrow_hashref;
-}
 
 sub lastmove {
     my ($itemnumber) = @_;

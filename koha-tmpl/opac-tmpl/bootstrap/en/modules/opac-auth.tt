@@ -31,6 +31,8 @@
                                 <p>Sorry, the system doesn't think you have permission to access this page. </p>
                                 [% IF SCO_login %]
                                     <p><a href="/cgi-bin/koha/sco/sco-main.pl?logout.x=1">Log out and try again with a different user.</a></p>
+                                [% ELSIF SCI_login %]
+                                    <p><a href="/cgi-bin/koha/sci/sci-main.pl?logout.x=1">Log out and try again with a different user.</a></p>
                                 [% END %]
                             </div>
                         [% END %]
@@ -161,6 +163,8 @@
                         [% END # /End googleopenidconnect %]
                         [% IF SCO_login %]
                             <form action="/cgi-bin/koha/sco/sco-main.pl" name="auth" id="auth" method="post" autocomplete="off">
+                        [% ELSIF SCI_login %]
+                            <form action="/cgi-bin/koha/sci/sci-main.pl" name="auth" id="auth" method="post" autocomplete="off">
                         [% ELSE %]
                             <form action="[% script_name %]" name="auth" id="auth" method="post" autocomplete="off">
                         [% END %]
@@ -181,14 +185,14 @@
                                 </div>
                             [% END %]
                             <div id="nologininstructions">
-                            [% IF Koha.Preference('NoLoginInstructions') %]
-                                [% Koha.Preference('NoLoginInstructions') %]
+                            [% IF Koha.Preference('OpacLoginInstructions') %]
+                                [% Koha.Preference('OpacLoginInstructions') %]
                             [% ELSE %]
                                 <h5>Don't have a password yet?</h5>
                                 <p>If you don't have a password yet, stop by the circulation desk the next time you're in the library. We'll happily set one up for you.</p>
                                 <h5>Don't have a library card?</h5>
                                 <p>If you don't have a library card, stop by your local library to sign up.</p>
-                            [% END # / IF Koha.Preference('NoLoginInstructions') %]
+                            [% END # / IF Koha.Preference('OpacLoginInstructions') %]
 
                             [% IF PatronSelfRegistration && PatronSelfRegistrationDefaultCategory %]<span id="registrationinstructions"><a href="/cgi-bin/koha/opac-memberentry.pl">You may register here.</a></span>
                             [% END %]

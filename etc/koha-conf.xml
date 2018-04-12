@@ -90,7 +90,7 @@ __PAZPAR2_TOGGLE_XML_POST__
  <biblioservershadow>1</biblioservershadow>
  <authorityserver>authorities</authorityserver>
  <authorityservershadow>1</authorityservershadow>
- <pluginsdir>__PLUGINS_DIR__</pluginsdir>
+ <pluginsdir>__PLUGINS_DIR__</pluginsdir> <!-- This entry can be repeated to use multiple directories -->
  <enable_plugins>0</enable_plugins>
  <upload_path></upload_path>
  <intranetdir>__INTRANET_CGI_DIR__</intranetdir>
@@ -150,6 +150,11 @@ __PAZPAR2_TOGGLE_XML_POST__
  <plack_max_requests>50</plack_max_requests>
  <plack_workers>2</plack_workers>
 
+ <elasticsearch>
+     <server>localhost:9200</server>
+     <index_name>koha___DB_NAME__</index_name>
+ </elasticsearch>
+
  <interlibrary_loans>
      <!-- Path to where Illbackends are located on the system
           - This setting should normally not be touched -->
@@ -170,6 +175,11 @@ __PAZPAR2_TOGGLE_XML_POST__
           - By default this is set to 'ILLLIBS' -->
      <partner_code>ILLLIBS</partner_code>
  </interlibrary_loans>
+
+ <!-- The timezone setting can let you force the timezone for this
+      instance to be something other then the local timezone of the
+      server. e.g. Antarctica/South_Pole -->
+ <timezone></timezone>
 
 </config>
 </yazgfs>

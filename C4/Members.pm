@@ -26,6 +26,8 @@ use C4::Context;
 use String::Random qw( random_string );
 use Scalar::Util qw( looks_like_number );
 use Date::Calc qw/Today check_date Date_to_Days/;
+use List::MoreUtils qw( uniq );
+use JSON qw(to_json);
 use C4::Log; # logaction
 use C4::Overdues;
 use C4::Reserves;
@@ -61,16 +63,11 @@ BEGIN {
     #Get data
     push @EXPORT, qw(
 
-        &GetPendingIssues
         &GetAllIssues
-
-        &GetMemberAccountRecords
 
         &GetBorrowersToExpunge
 
         &IssueSlip
-
-        GetOverduesForPatron
     );
 
     #Modify data
@@ -173,11 +170,14 @@ The "message" field that comes from the DB is OK.
 
 # TODO: use {anonymous => hashes} instead of a dozen %flaginfo
 # FIXME rename this function.
+# DEPRECATED Do not use this subroutine!
 sub patronflags {
     my %flags;
     my ( $patroninformation) = @_;
     my $dbh=C4::Context->dbh;
-    my ($balance, $owing) = GetMemberAccountBalance( $patroninformation->{'borrowernumber'});
+    my $patron = Koha::Patrons->find( $patroninformation->{borrowernumber} );
+    my $account = $patron->account;
+    my $owing = $account->non_issues_charges;
     if ( $owing > 0 ) {
         my %flaginfo;
         my $noissuescharge = C4::Context->preference("noissuescharge") || 5;
@@ -188,7 +188,7 @@ sub patronflags {
         }
         $flags{'CHARGES'} = \%flaginfo;
     }
-    elsif ( $balance < 0 ) {
+    elsif ( ( my $balance = $account->balance ) < 0 ) {
         my %flaginfo;
         $flaginfo{'message'} = sprintf 'Patron has credit of %.02f', -$balance;
         $flaginfo{'amount'}  = sprintf "%.02f", $balance;
@@ -203,8 +203,7 @@ sub patronflags {
         my @guarantees = $p->guarantees();
         my $guarantees_non_issues_charges;
         foreach my $g ( @guarantees ) {
-            my ( $b, $n, $o ) = C4::Members::GetMemberAccountBalance( $g->id );
-            $guarantees_non_issues_charges += $n;
+            $guarantees_non_issues_charges += $g->account->non_issues_charges;
         }
 
         if ( $guarantees_non_issues_charges > $no_issues_charge_guarantees ) {
@@ -261,7 +260,6 @@ sub patronflags {
         $flags{'ODUES'} = \%flaginfo;
     }
 
-    my $patron = Koha::Patrons->find( $patroninformation->{borrowernumber} );
     my $waiting_holds = $patron->holds->search({ found => 'W' });
     my $nowaiting = $waiting_holds->count;
     if ( $nowaiting > 0 ) {
@@ -325,6 +323,25 @@ sub ModMember {
 
     my $patron = Koha::Patrons->find( $new_borrower->{borrowernumber} );
 
+    my $borrowers_log = C4::Context->preference("BorrowersLog");
+    if ( $borrowers_log && $patron->cardnumber ne $new_borrower->{cardnumber} )
+    {
+        logaction(
+            "MEMBERS",
+            "MODIFY",
+            $data{'borrowernumber'},
+            to_json(
+                {
+                    cardnumber_replaced => {
+                        previous_cardnumber => $patron->cardnumber,
+                        new_cardnumber      => $new_borrower->{cardnumber},
+                    }
+                },
+                { utf8 => 1, pretty => 1 }
+            )
+        );
+    }
+
     delete $new_borrower->{userid} if exists $new_borrower->{userid} and not $new_borrower->{userid};
 
     my $execute_success = $patron->store if $patron->set($new_borrower);
@@ -356,7 +373,7 @@ sub ModMember {
             Koha::NorwegianPatronDB::NLSync({ 'borrowernumber' => $data{'borrowernumber'} });
         }
 
-        logaction("MEMBERS", "MODIFY", $data{'borrowernumber'}, "UPDATE (executed w/ arg: $data{'borrowernumber'})") if C4::Context->preference("BorrowersLog");
+        logaction("MEMBERS", "MODIFY", $data{'borrowernumber'}, "UPDATE (executed w/ arg: $data{'borrowernumber'})") if $borrowers_log;
     }
     return $execute_success;
 }
@@ -535,9 +552,6 @@ mode, to avoid database corruption.
 
 =cut
 
-use vars qw( @weightings );
-my @weightings = ( 8, 4, 6, 3, 5, 2, 1 );
-
 sub fixup_cardnumber {
     my ($cardnumber) = @_;
     my $autonumber_members = C4::Context->boolean_preference('autoMemberNum') || 0;
@@ -546,142 +560,15 @@ sub fixup_cardnumber {
     # automatically. Should be either "1" or something else.
     # Defaults to "0", which is interpreted as "no".
 
-    #     if ($cardnumber !~ /\S/ && $autonumber_members) {
     ($autonumber_members) or return $cardnumber;
-    my $checkdigit = C4::Context->preference('checkdigit');
     my $dbh = C4::Context->dbh;
-    if ( $checkdigit and $checkdigit eq 'katipo' ) {
 
-        # if checkdigit is selected, calculate katipo-style cardnumber.
-        # otherwise, just use the max()
-        # purpose: generate checksum'd member numbers.
-        # We'll assume we just got the max value of digits 2-8 of member #'s
-        # from the database and our job is to increment that by one,
-        # determine the 1st and 9th digits and return the full string.
-        my $sth = $dbh->prepare(
-            "select max(substring(borrowers.cardnumber,2,7)) as new_num from borrowers"
-        );
-        $sth->execute;
-        my $data = $sth->fetchrow_hashref;
-        $cardnumber = $data->{new_num};
-        if ( !$cardnumber ) {    # If DB has no values,
-            $cardnumber = 1000000;    # start at 1000000
-        } else {
-            $cardnumber += 1;
-        }
-
-        my $sum = 0;
-        for ( my $i = 0 ; $i < 8 ; $i += 1 ) {
-            # read weightings, left to right, 1 char at a time
-            my $temp1 = $weightings[$i];
-
-            # sequence left to right, 1 char at a time
-            my $temp2 = substr( $cardnumber, $i, 1 );
-
-            # mult each char 1-7 by its corresponding weighting
-            $sum += $temp1 * $temp2;
-        }
-
-        my $rem = ( $sum % 11 );
-        $rem = 'X' if $rem == 10;
-
-        return "V$cardnumber$rem";
-     } else {
-
-        my $sth = $dbh->prepare(
-            'SELECT MAX( CAST( cardnumber AS SIGNED ) ) FROM borrowers WHERE cardnumber REGEXP "^-?[0-9]+$"'
-        );
-        $sth->execute;
-        my ($result) = $sth->fetchrow;
-        return $result + 1;
-    }
-    return $cardnumber;     # just here as a fallback/reminder 
-}
-
-=head2 GetPendingIssues
-
-  my $issues = &GetPendingIssues(@borrowernumber);
-
-Looks up what the patron with the given borrowernumber has borrowed.
-
-C<&GetPendingIssues> returns a
-reference-to-array where each element is a reference-to-hash; the
-keys are the fields from the C<issues>, C<biblio>, and C<items> tables.
-The keys include C<biblioitems> fields.
-
-=cut
-
-sub GetPendingIssues {
-    my @borrowernumbers = @_;
-
-    unless (@borrowernumbers ) { # return a ref_to_array
-        return \@borrowernumbers; # to not cause surprise to caller
-    }
-
-    # Borrowers part of the query
-    my $bquery = '';
-    for (my $i = 0; $i < @borrowernumbers; $i++) {
-        $bquery .= ' issues.borrowernumber = ?';
-        if ($i < $#borrowernumbers ) {
-            $bquery .= ' OR';
-        }
-    }
-
-    # FIXME: namespace collision: each table has "timestamp" fields.  Which one is "timestamp" ?
-    # FIXME: circ/ciculation.pl tries to sort by timestamp!
-    # FIXME: namespace collision: other collisions possible.
-    # FIXME: most of this data isn't really being used by callers.
-    my $query =
-   "SELECT issues.*,
-            items.*,
-           biblio.*,
-           biblioitems.volume,
-           biblioitems.number,
-           biblioitems.itemtype,
-           biblioitems.isbn,
-           biblioitems.issn,
-           biblioitems.publicationyear,
-           biblioitems.publishercode,
-           biblioitems.volumedate,
-           biblioitems.volumedesc,
-           biblioitems.lccn,
-           biblioitems.url,
-           borrowers.firstname,
-           borrowers.surname,
-           borrowers.cardnumber,
-           issues.timestamp AS timestamp,
-           issues.renewals  AS renewals,
-           issues.borrowernumber AS borrowernumber,
-            items.renewals  AS totalrenewals
-    FROM   issues
-    LEFT JOIN items       ON items.itemnumber       =      issues.itemnumber
-    LEFT JOIN biblio      ON items.biblionumber     =      biblio.biblionumber
-    LEFT JOIN biblioitems ON items.biblioitemnumber = biblioitems.biblioitemnumber
-    LEFT JOIN borrowers ON issues.borrowernumber = borrowers.borrowernumber
-    WHERE
-      $bquery
-    ORDER BY issues.issuedate"
-    ;
-
-    my $sth = C4::Context->dbh->prepare($query);
-    $sth->execute(@borrowernumbers);
-    my $data = $sth->fetchall_arrayref({});
-    my $today = dt_from_string;
-    foreach (@{$data}) {
-        if ($_->{issuedate}) {
-            $_->{issuedate} = dt_from_string($_->{issuedate}, 'sql');
-        }
-        $_->{date_due_sql} = $_->{date_due};
-        # FIXME no need to have this value
-        $_->{date_due} or next;
-        $_->{date_due_sql} = $_->{date_due};
-        # FIXME no need to have this value
-        $_->{date_due} = dt_from_string($_->{date_due}, 'sql');
-        if ( DateTime->compare($_->{date_due}, $today) == -1 ) {
-            $_->{overdue} = 1;
-        }
-    }
-    return $data;
+    my $sth = $dbh->prepare(
+        'SELECT MAX( CAST( cardnumber AS SIGNED ) ) FROM borrowers WHERE cardnumber REGEXP "^-?[0-9]+$"'
+    );
+    $sth->execute;
+    my ($result) = $sth->fetchrow;
+    return $result + 1;
 }
 
 =head2 GetAllIssues
@@ -733,87 +620,6 @@ sub GetAllIssues {
     my $sth = $dbh->prepare($query);
     $sth->execute( $borrowernumber, $borrowernumber );
     return $sth->fetchall_arrayref( {} );
-}
-
-
-=head2 GetMemberAccountRecords
-
-  ($total, $acctlines, $count) = &GetMemberAccountRecords($borrowernumber);
-
-Looks up accounting data for the patron with the given borrowernumber.
-
-C<&GetMemberAccountRecords> returns a three-element array. C<$acctlines> is a
-reference-to-array, where each element is a reference-to-hash; the
-keys are the fields of the C<accountlines> table in the Koha database.
-C<$count> is the number of elements in C<$acctlines>. C<$total> is the
-total amount outstanding for all of the account lines.
-
-=cut
-
-sub GetMemberAccountRecords {
-    my ($borrowernumber) = @_;
-    my $dbh = C4::Context->dbh;
-    my @acctlines;
-    my $numlines = 0;
-    my $strsth      = qq(
-                        SELECT * 
-                        FROM accountlines 
-                        WHERE borrowernumber=?);
-    $strsth.=" ORDER BY accountlines_id desc";
-    my $sth= $dbh->prepare( $strsth );
-    $sth->execute( $borrowernumber );
-
-    my $total = 0;
-    while ( my $data = $sth->fetchrow_hashref ) {
-        if ( $data->{itemnumber} ) {
-            my $item = Koha::Items->find( $data->{itemnumber} );
-            my $biblio = $item->biblio;
-            $data->{biblionumber} = $biblio->biblionumber;
-            $data->{title}        = $biblio->title;
-        }
-        $acctlines[$numlines] = $data;
-        $numlines++;
-        $total += sprintf "%.0f", 1000*$data->{amountoutstanding}; # convert float to integer to avoid round-off errors
-    }
-    $total /= 1000;
-    return ( $total, \@acctlines,$numlines);
-}
-
-=head2 GetMemberAccountBalance
-
-  ($total_balance, $non_issue_balance, $other_charges) = &GetMemberAccountBalance($borrowernumber);
-
-Calculates amount immediately owing by the patron - non-issue charges.
-Based on GetMemberAccountRecords.
-Charges exempt from non-issue are:
-* Res (reserves)
-* Rent (rental) if RentalsInNoissuesCharge syspref is set to false
-* Manual invoices if ManInvInNoissuesCharge syspref is set to false
-
-=cut
-
-sub GetMemberAccountBalance {
-    my ($borrowernumber) = @_;
-
-    my $ACCOUNT_TYPE_LENGTH = 5; # this is plain ridiculous...
-
-    my @not_fines;
-    push @not_fines, 'Res' unless C4::Context->preference('HoldsInNoissuesCharge');
-    push @not_fines, 'Rent' unless C4::Context->preference('RentalsInNoissuesCharge');
-    unless ( C4::Context->preference('ManInvInNoissuesCharge') ) {
-        my $dbh = C4::Context->dbh;
-        my $man_inv_types = $dbh->selectcol_arrayref(qq{SELECT authorised_value FROM authorised_values WHERE category = 'MANUAL_INV'});
-        push @not_fines, map substr($_, 0, $ACCOUNT_TYPE_LENGTH), @$man_inv_types;
-    }
-    my %not_fine = map {$_ => 1} @not_fines;
-
-    my ($total, $acctlines) = GetMemberAccountRecords($borrowernumber);
-    my $other_charges = 0;
-    foreach (@$acctlines) {
-        $other_charges += $_->{amountoutstanding} if $not_fine{ substr($_->{accounttype}, 0, $ACCOUNT_TYPE_LENGTH) };
-    }
-
-    return ( $total, $total - $other_charges, $other_charges);
 }
 
 sub checkcardnumber {
@@ -1018,7 +824,7 @@ sub GetBorrowersToExpunge {
          <<issues.*>>
       </checkedout>
 
-  NOTE: Not all table fields are available, pleasee see GetPendingIssues for a list of available fields.
+  NOTE: Fields from tables issues, items, biblio and biblioitems are available
 
 =cut
 
@@ -1031,56 +837,73 @@ sub IssueSlip {
     my $patron = Koha::Patrons->find( $borrowernumber );
     return unless $patron;
 
-    my @issues = @{ GetPendingIssues($borrowernumber) };
-
-    for my $issue (@issues) {
-        $issue->{date_due} = $issue->{date_due_sql};
-        if ($quickslip) {
-            my $today = output_pref({ dt => dt_from_string, dateformat => 'iso', dateonly => 1 });
-            if ( substr( $issue->{issuedate}, 0, 10 ) eq $today
-                or substr( $issue->{lastreneweddate}, 0, 10 ) eq $today ) {
-                  $issue->{now} = 1;
-            };
-        }
-    }
-
-    # Sort on timestamp then on issuedate then on issue_id
-    # useful for tests and could be if modified in a batch
-    @issues = sort {
-            $b->{timestamp} <=> $a->{timestamp}
-         or $b->{issuedate} <=> $a->{issuedate}
-         or $b->{issue_id}  <=> $a->{issue_id}
-    } @issues;
+    my $pending_checkouts = $patron->pending_checkouts; # Should be $patron->checkouts->pending?
 
     my ($letter_code, %repeat, %loops);
     if ( $quickslip ) {
+        my $today_start = dt_from_string->set( hour => 0, minute => 0, second => 0 );
+        my $today_end = dt_from_string->set( hour => 23, minute => 59, second => 0 );
+        $today_start = Koha::Database->new->schema->storage->datetime_parser->format_datetime( $today_start );
+        $today_end = Koha::Database->new->schema->storage->datetime_parser->format_datetime( $today_end );
         $letter_code = 'ISSUEQSLIP';
-        my @checkouts = map {
-                'biblio'       => $_,
-                'items'        => $_,
-                'biblioitems'  => $_,
-                'issues'       => $_,
-            }, grep { $_->{'now'} } @issues;
+
+        # issue date or lastreneweddate is today
+        my $todays_checkouts = $pending_checkouts->search(
+            {
+                -or => {
+                    issuedate => {
+                        '>=' => $today_start,
+                        '<=' => $today_end,
+                    },
+                    lastreneweddate =>
+                      { '>=' => $today_start, '<=' => $today_end, }
+                }
+            }
+        );
+        my @checkouts;
+        while ( my $c = $todays_checkouts->next ) {
+            my $all = $c->unblessed_all_relateds;
+            push @checkouts, {
+                biblio      => $all,
+                items       => $all,
+                biblioitems => $all,
+                issues      => $all,
+            };
+        }
+
         %repeat =  (
-            checkedout => \@checkouts, # History syntax
+            checkedout => \@checkouts, # Historical syntax
         );
         %loops = (
             issues => [ map { $_->{issues}{itemnumber} } @checkouts ], # TT syntax
         );
     }
     else {
-        my @checkouts = map {
-            'biblio'        => $_,
-              'items'       => $_,
-              'biblioitems' => $_,
-              'issues'      => $_,
-        }, grep { !$_->{'overdue'} } @issues;
-        my @overdues = map {
-            'biblio'        => $_,
-              'items'       => $_,
-              'biblioitems' => $_,
-              'issues'      => $_,
-        }, grep { $_->{'overdue'} } @issues;
+        my $today = Koha::Database->new->schema->storage->datetime_parser->format_datetime( dt_from_string );
+        # Checkouts due in the future
+        my $checkouts = $pending_checkouts->search({ date_due => { '>' => $today } });
+        my @checkouts; my @overdues;
+        while ( my $c = $checkouts->next ) {
+            my $all = $c->unblessed_all_relateds;
+            push @checkouts, {
+                biblio      => $all,
+                items       => $all,
+                biblioitems => $all,
+                issues      => $all,
+            };
+        }
+
+        # Checkouts due in the past are overdues
+        my $overdues = $pending_checkouts->search({ date_due => { '<=' => $today } });
+        while ( my $o = $overdues->next ) {
+            my $all = $o->unblessed_all_relateds;
+            push @overdues, {
+                biblio      => $all,
+                items       => $all,
+                biblioitems => $all,
+                issues      => $all,
+            };
+        }
         my $news = GetNewsToDisplay( "slip", $branch );
         my @news = map {
             $_->{'timestamp'} = $_->{'newdate'};
@@ -1192,25 +1015,6 @@ DELETE FROM borrower_modifications
 WHERE borrowernumber = 0 AND DATEDIFF( NOW(), timestamp ) > ?|;
     my $cnt=$dbh->do($sql, undef, ($days) );
     return $cnt eq '0E0'? 0: $cnt;
-}
-
-sub GetOverduesForPatron {
-    my ( $borrowernumber ) = @_;
-
-    my $sql = "
-        SELECT *
-        FROM issues, items, biblio, biblioitems
-        WHERE items.itemnumber=issues.itemnumber
-          AND biblio.biblionumber   = items.biblionumber
-          AND biblio.biblionumber   = biblioitems.biblionumber
-          AND issues.borrowernumber = ?
-          AND date_due < NOW()
-    ";
-
-    my $sth = C4::Context->dbh->prepare( $sql );
-    $sth->execute( $borrowernumber );
-
-    return $sth->fetchall_arrayref({});
 }
 
 END { }    # module clean-up code here (global destructor)

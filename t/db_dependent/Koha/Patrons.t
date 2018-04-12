@@ -19,13 +19,15 @@
 
 use Modern::Perl;
 
-use Test::More tests => 25;
+use Test::More tests => 27;
 use Test::Warn;
 use Time::Fake;
 use DateTime;
+use JSON;
 
 use C4::Biblio;
 use C4::Circulation;
+
 use C4::Members;
 use C4::Circulation;
 
@@ -396,14 +398,15 @@ subtest 'add_enrolment_fee_if_needed' => sub {
     my $borrowernumber = C4::Members::AddMember(%borrower_data);
     $borrower_data{borrowernumber} = $borrowernumber;
 
-    my ($total) = C4::Members::GetMemberAccountRecords($borrowernumber);
-    is( $total, $enrolmentfee_K, "New kid pay $enrolmentfee_K" );
+    my $patron = Koha::Patrons->find( $borrowernumber );
+    my $total = $patron->account->balance;
+    is( int($total), int($enrolmentfee_K), "New kid pay $enrolmentfee_K" );
 
     t::lib::Mocks::mock_preference( 'FeeOnChangePatronCategory', 0 );
     $borrower_data{categorycode} = 'J';
     C4::Members::ModMember(%borrower_data);
-    ($total) = C4::Members::GetMemberAccountRecords($borrowernumber);
-    is( $total, $enrolmentfee_K, "Kid growing and become a juvenile, but shouldn't pay for the upgrade " );
+    $total = $patron->account->balance;
+    is( int($total), int($enrolmentfee_K), "Kid growing and become a juvenile, but shouldn't pay for the upgrade " );
 
     $borrower_data{categorycode} = 'K';
     C4::Members::ModMember(%borrower_data);
@@ -411,24 +414,23 @@ subtest 'add_enrolment_fee_if_needed' => sub {
 
     $borrower_data{categorycode} = 'J';
     C4::Members::ModMember(%borrower_data);
-    ($total) = C4::Members::GetMemberAccountRecords($borrowernumber);
-    is( $total, $enrolmentfee_K + $enrolmentfee_J, "Kid growing and become a juvenile, they should pay " . ( $enrolmentfee_K + $enrolmentfee_J ) );
+    $total = $patron->account->balance;
+    is( int($total), int($enrolmentfee_K + $enrolmentfee_J), "Kid growing and become a juvenile, they should pay " . ( $enrolmentfee_K + $enrolmentfee_J ) );
 
     # Check with calling directly Koha::Patron->get_enrolment_fee_if_needed
-    my $patron = Koha::Patrons->find($borrowernumber);
     $patron->categorycode('YA')->store;
     my $fee = $patron->add_enrolment_fee_if_needed;
-    ($total) = C4::Members::GetMemberAccountRecords($borrowernumber);
-    is( $total,
-        $enrolmentfee_K + $enrolmentfee_J + $enrolmentfee_YA,
+    $total = $patron->account->balance;
+    is( int($total),
+        int($enrolmentfee_K + $enrolmentfee_J + $enrolmentfee_YA),
         "Juvenile growing and become an young adult, they should pay " . ( $enrolmentfee_K + $enrolmentfee_J + $enrolmentfee_YA )
     );
 
     $patron->delete;
 };
 
-subtest 'checkouts + get_overdues + old_checkouts' => sub {
-    plan tests => 12;
+subtest 'checkouts + pending_checkouts + get_overdues + old_checkouts' => sub {
+    plan tests => 17;
 
     my $library = $builder->build( { source => 'Branch' } );
     my ($biblionumber_1) = AddBiblio( MARC::Record->new, '' );
@@ -480,6 +482,9 @@ subtest 'checkouts + get_overdues + old_checkouts' => sub {
     my $checkouts = $patron->checkouts;
     is( $checkouts->count, 0, 'checkouts should not return any issues for that patron' );
     is( ref($checkouts), 'Koha::Checkouts', 'checkouts should return a Koha::Checkouts object' );
+    my $pending_checkouts = $patron->pending_checkouts;
+    is( $pending_checkouts->count, 0, 'pending_checkouts should not return any issues for that patron' );
+    is( ref($pending_checkouts), 'Koha::Checkouts', 'pending_checkouts should return a Koha::Checkouts object' );
     my $old_checkouts = $patron->old_checkouts;
     is( $old_checkouts->count, 0, 'old_checkouts should not return any issues for that patron' );
     is( ref($old_checkouts), 'Koha::Old::Checkouts', 'old_checkouts should return a Koha::Old::Checkouts object' );
@@ -498,6 +503,12 @@ subtest 'checkouts + get_overdues + old_checkouts' => sub {
     $checkouts = $patron->checkouts;
     is( $checkouts->count, 3, 'checkouts should return 3 issues for that patron' );
     is( ref($checkouts), 'Koha::Checkouts', 'checkouts should return a Koha::Checkouts object' );
+    $pending_checkouts = $patron->pending_checkouts;
+    is( $pending_checkouts->count, 3, 'pending_checkouts should return 3 issues for that patron' );
+    is( ref($pending_checkouts), 'Koha::Checkouts', 'pending_checkouts should return a Koha::Checkouts object' );
+
+    my $first_checkout = $pending_checkouts->next;
+    is( $first_checkout->unblessed_all_relateds->{biblionumber}, $item_3->{biblionumber}, 'pending_checkouts should prefetch values from other tables (here biblio)' );
 
     my $overdues = $patron->get_overdues;
     is( $overdues->count, 2, 'Patron should have 2 overdues');
@@ -528,17 +539,17 @@ subtest 'get_age' => sub {
 
     $patron->dateofbirth( undef );
     is( $patron->get_age, undef, 'get_age should return undef if no dateofbirth is defined' );
-    $patron->dateofbirth( $today->clone->add( years => -12, months => -6, days => -1 ) );
+    $patron->dateofbirth( $today->clone->add( years => -12, months => -6, days => -1, end_of_month => 'limit'  ) );
     is( $patron->get_age, 12, 'Patron should be 12' );
-    $patron->dateofbirth( $today->clone->add( years => -18, months => 0, days => 1 ) );
+    $patron->dateofbirth( $today->clone->add( years => -18, months => 0, days => 1, end_of_month => 'limit'  ) );
     is( $patron->get_age, 17, 'Patron should be 17, happy birthday tomorrow!' );
-    $patron->dateofbirth( $today->clone->add( years => -18, months => 0, days => 0 ) );
+    $patron->dateofbirth( $today->clone->add( years => -18, months => 0, days => 0, end_of_month => 'limit'  ) );
     is( $patron->get_age, 18, 'Patron should be 18' );
-    $patron->dateofbirth( $today->clone->add( years => -18, months => -12, days => -31 ) );
+    $patron->dateofbirth( $today->clone->add( years => -18, months => -12, days => -31, end_of_month => 'limit'  ) );
     is( $patron->get_age, 19, 'Patron should be 19' );
-    $patron->dateofbirth( $today->clone->add( years => -18, months => -12, days => -30 ) );
+    $patron->dateofbirth( $today->clone->add( years => -18, months => -12, days => -30, end_of_month => 'limit'  ) );
     is( $patron->get_age, 19, 'Patron should be 19 again' );
-    $patron->dateofbirth( $today->clone->add( years => 0,   months => -1, days => -1 ) );
+    $patron->dateofbirth( $today->clone->add( years => 0,   months => -1, days => -1, end_of_month => 'limit'  ) );
     is( $patron->get_age, 0, 'Patron is a newborn child' );
 
     $patron->delete;
@@ -1118,8 +1129,94 @@ subtest 'is_child | is_adult' => sub {
     $patron_other->delete;
 };
 
+subtest 'get_overdues' => sub {
+    plan tests => 7;
+
+    my $library = $builder->build( { source => 'Branch' } );
+    my ($biblionumber_1) = AddBiblio( MARC::Record->new, '' );
+    my $item_1 = $builder->build(
+        {
+            source => 'Item',
+            value  => {
+                homebranch    => $library->{branchcode},
+                holdingbranch => $library->{branchcode},
+                biblionumber  => $biblionumber_1
+            }
+        }
+    );
+    my $item_2 = $builder->build(
+        {
+            source => 'Item',
+            value  => {
+                homebranch    => $library->{branchcode},
+                holdingbranch => $library->{branchcode},
+                biblionumber  => $biblionumber_1
+            }
+        }
+    );
+    my ($biblionumber_2) = AddBiblio( MARC::Record->new, '' );
+    my $item_3 = $builder->build(
+        {
+            source => 'Item',
+            value  => {
+                homebranch    => $library->{branchcode},
+                holdingbranch => $library->{branchcode},
+                biblionumber  => $biblionumber_2
+            }
+        }
+    );
+    my $patron = $builder->build(
+        {
+            source => 'Borrower',
+            value  => { branchcode => $library->{branchcode} }
+        }
+    );
+
+    my $module = new Test::MockModule('C4::Context');
+    $module->mock( 'userenv', sub { { branch => $library->{branchcode} } } );
+
+    AddIssue( $patron, $item_1->{barcode}, DateTime->now->subtract( days => 1 ) );
+    AddIssue( $patron, $item_2->{barcode}, DateTime->now->subtract( days => 5 ) );
+    AddIssue( $patron, $item_3->{barcode} );
+
+    $patron = Koha::Patrons->find( $patron->{borrowernumber} );
+    my $overdues = $patron->get_overdues;
+    is( $overdues->count, 2, 'Patron should have 2 overdues');
+    is( $overdues->next->itemnumber, $item_1->{itemnumber}, 'The issue should be returned in the same order as they have been done, first is correct' );
+    is( $overdues->next->itemnumber, $item_2->{itemnumber}, 'The issue should be returned in the same order as they have been done, second is correct' );
+
+    my $o = $overdues->reset->next;
+    my $unblessed_overdue = $o->unblessed_all_relateds;
+    is( exists( $unblessed_overdue->{issuedate} ), 1, 'Fields from the issues table should be filled' );
+    is( exists( $unblessed_overdue->{itemcallnumber} ), 1, 'Fields from the items table should be filled' );
+    is( exists( $unblessed_overdue->{title} ), 1, 'Fields from the biblio table should be filled' );
+    is( exists( $unblessed_overdue->{itemtype} ), 1, 'Fields from the biblioitems table should be filled' );
+
+    # Clean stuffs
+    $patron->checkouts->delete;
+    $patron->delete;
+};
+
 $retrieved_patron_1->delete;
 is( Koha::Patrons->search->count, $nb_of_patrons + 1, 'Delete should have deleted the patron' );
+
+subtest 'Log cardnumber change' => sub {
+    plan tests => 3;
+
+    t::lib::Mocks::mock_preference( 'BorrowersLog', 1 );
+    my $patron = $builder->build( { source => 'Borrower' } );
+
+    my $cardnumber = $patron->{cardnumber};
+    $patron->{cardnumber} = 'TESTCARDNUMBER';
+    ModMember(%$patron);
+
+    my @logs = $schema->resultset('ActionLog')->search( { module => 'MEMBERS', action => 'MODIFY', object => $patron->{borrowernumber} } );
+    my $log_info = from_json( $logs[0]->info );
+    is( $log_info->{cardnumber_replaced}->{new_cardnumber}, 'TESTCARDNUMBER', 'Got correct new cardnumber' );
+    is( $log_info->{cardnumber_replaced}->{previous_cardnumber}, $cardnumber, 'Got correct old cardnumber' );
+    is( scalar @logs, 2, 'With BorrowerLogs, Change in cardnumber should be logged, as well as general alert of patron mod.' );
+};
+
 
 $schema->storage->txn_rollback;
 

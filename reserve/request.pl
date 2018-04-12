@@ -65,8 +65,6 @@ my ( $template, $borrowernumber, $cookie, $flags ) = get_template_and_user(
     }
 );
 
-my $multihold = $input->param('multi_hold');
-$template->param(multi_hold => $multihold);
 my $showallitems = $input->param('showallitems');
 
 my $itemtypes = { map { $_->{itemtype} => $_ } @{ Koha::ItemTypes->search_with_localization->unblessed } };
@@ -127,13 +125,16 @@ if ($findborrower) {
 }
 
 my @biblionumbers = ();
+my $biblionumber = $input->param('biblionumber');
 my $biblionumbers = $input->param('biblionumbers');
-if ($multihold) {
+if ( $biblionumbers ) {
     @biblionumbers = split '/', $biblionumbers;
 } else {
     push @biblionumbers, $input->multi_param('biblionumber');
 }
 
+# FIXME multi_hold should not be a variable but depends on the number of elements in @biblionumbers
+$template->param(multi_hold => scalar $input->param('multi_hold'));
 
 # If we have the borrowernumber because we've performed an action, then we
 # don't want to try to place another reserve.
@@ -179,12 +180,14 @@ if ($borrowernumber_hold && !$action) {
         $diffbranch = 1;
     }
 
+    my $amount_outstanding = $patron->account->balance;
     $template->param(
+                patron              => $patron,
                 expiry              => $expiry,
                 diffbranch          => $diffbranch,
                 messages            => $messages,
                 warnings            => $warnings,
-                amount_outstanding  => GetMemberAccountRecords($patron->borrowernumber),
+                amount_outstanding  => $amount_outstanding,
     );
 }
 
@@ -315,8 +318,16 @@ foreach my $biblionumber (@biblionumbers) {
     ## Should be same as biblionumber
     my @biblioitemnumbers = keys %itemnumbers_of_biblioitem;
 
-    ## Hash of biblioitemnumber to 'biblioitem' table records
-    my $biblioiteminfos_of  = GetBiblioItemInfosOf(@biblioitemnumbers);
+    my $biblioiteminfos_of = {
+        map {
+            my $biblioitem = $_;
+            ( $biblioitem->{biblioitemnumber} => $biblioitem )
+          } @{ Koha::Biblioitems->search(
+                { biblioitemnumber => { -in => \@biblioitemnumbers } },
+                { select => ['biblioitemnumber', 'publicationyear', 'itemtype']}
+            )->unblessed
+          }
+    };
 
     my $frameworkcode = GetFrameworkCode( $biblionumber );
     my @notforloan_avs = Koha::AuthorisedValues->search_by_koha_field({ kohafield => 'items.notforloan', frameworkcode => $frameworkcode });
@@ -467,7 +478,7 @@ foreach my $biblionumber (@biblionumbers) {
 
                     push( @available_itemtypes, $item->{itype} );
                 }
-                elsif ( C4::Context->preference('AllowHoldPolicyOverride') ) {
+                elsif ( $can_item_be_reserved eq 'tooManyReserves' && C4::Context->preference('AllowHoldPolicyOverride') ) {
                     # If AllowHoldPolicyOverride is set, it should override EVERY restriction, not just branch item rules
                     $item->{override} = 1;
                     $num_override++;
@@ -617,16 +628,11 @@ $template->param( biblionumbers => $biblionumbers );
 $template->param( exceeded_maxreserves => $exceeded_maxreserves );
 $template->param( exceeded_holds_per_record => $exceeded_holds_per_record );
 
-if ($multihold) {
-    $template->param( multi_hold => 1 );
-}
-
 if ( C4::Context->preference( 'AllowHoldDateInFuture' ) ) {
     $template->param( reserve_in_future => 1 );
 }
 
 $template->param(
-    patron => $patron,
     SuspendHoldsIntranet => C4::Context->preference('SuspendHoldsIntranet'),
     AutoResumeSuspendedHolds => C4::Context->preference('AutoResumeSuspendedHolds'),
 );
